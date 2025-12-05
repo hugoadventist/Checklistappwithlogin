@@ -824,6 +824,10 @@
     color: var(--color-gray-700);
   }
 
+  .text-green-600 {
+    color: var(--color-green-600);
+  }
+
   .text-indigo-600 {
     color: var(--color-indigo-600);
   }
