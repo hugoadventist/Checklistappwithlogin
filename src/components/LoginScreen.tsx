@@ -1,19 +1,13 @@
 import { useState } from 'react';
 import { LogIn } from 'lucide-react';
-import { createClient } from '@supabase/supabase-js';
-import { projectId, publicAnonKey } from '../utils/supabase/info';
-
-const supabase = createClient(
-  `https://${projectId}.supabase.co`,
-  publicAnonKey
-);
 
 interface LoginScreenProps {
   onLogin: (email: string, password: string) => Promise<void>;
   onSignup: (email: string, password: string, name: string) => Promise<void>;
+  onForgotPassword: (email: string) => Promise<void>;
 }
 
-export function LoginScreen({ onLogin, onSignup }: LoginScreenProps) {
+export function LoginScreen({ onLogin, onSignup, onForgotPassword }: LoginScreenProps) {
   const [isSignup, setIsSignup] = useState(false);
   const [isForgotPassword, setIsForgotPassword] = useState(false);
   const [email, setEmail] = useState('');
@@ -42,21 +36,14 @@ export function LoginScreen({ onLogin, onSignup }: LoginScreenProps) {
     }
   };
 
-  const handleForgotPassword = async (e: React.FormEvent) => {
+  const handleForgotPasswordSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setSuccess('');
     setLoading(true);
 
     try {
-      const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `https://${projectId}.supabase.co`,
-      });
-
-      if (error) {
-        throw error;
-      }
-
+      await onForgotPassword(email);
       setSuccess('Password reset email sent! Check your inbox.');
     } catch (err: any) {
       setError(err.message || 'Failed to send reset email');
@@ -80,7 +67,7 @@ export function LoginScreen({ onLogin, onSignup }: LoginScreenProps) {
             Enter your email to receive a password reset link
           </p>
 
-          <form onSubmit={handleForgotPassword} className="space-y-4">
+          <form onSubmit={handleForgotPasswordSubmit} className="space-y-4">
             <div>
               <label htmlFor="email" className="block text-gray-700 mb-2">
                 Email

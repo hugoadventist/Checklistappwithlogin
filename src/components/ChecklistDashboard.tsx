@@ -2,12 +2,16 @@ import { useState, useEffect } from 'react';
 import { Plus, LogOut, CheckSquare, Trash2 } from 'lucide-react';
 import { projectId } from '../utils/supabase/info';
 import type { Checklist } from '../App';
+import { createNR12Checklist } from '../utils/nr12-template';
 
 interface ChecklistDashboardProps {
   accessToken: string;
   user: any;
   onSelectChecklist: (id: string) => void;
   onLogout: () => void;
+  onNavigateToProfile: () => void;
+  onNavigateToUserManagement: () => void;
+  userRole: string;
 }
 
 export function ChecklistDashboard({
@@ -15,6 +19,9 @@ export function ChecklistDashboard({
   user,
   onSelectChecklist,
   onLogout,
+  onNavigateToProfile,
+  onNavigateToUserManagement,
+  userRole,
 }: ChecklistDashboardProps) {
   const [checklists, setChecklists] = useState<Checklist[]>([]);
   const [loading, setLoading] = useState(true);
@@ -37,6 +44,8 @@ export function ChecklistDashboard({
       );
 
       const data = await response.json();
+      
+      console.log('Fetch checklists response:', { status: response.status, data });
 
       if (!response.ok) {
         throw new Error(data.error || 'Failed to fetch checklists');
@@ -45,6 +54,7 @@ export function ChecklistDashboard({
       setChecklists(data.checklists || []);
     } catch (error) {
       console.error('Error fetching checklists:', error);
+      alert(`Error loading checklists: ${error.message}`);
     } finally {
       setLoading(false);
     }
@@ -114,7 +124,21 @@ export function ChecklistDashboard({
             <h1>My Checklists</h1>
           </div>
           <div className="flex items-center gap-4">
-            <span className="text-gray-600">
+            <button
+              onClick={onNavigateToProfile}
+              className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+            >
+              My Profile
+            </button>
+            {(userRole === 'Administrator' || userRole === 'Manager') && (
+              <button
+                onClick={onNavigateToUserManagement}
+                className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                User Management
+              </button>
+            )}
+            <span className="text-gray-600 border-l border-gray-300 pl-4">
               {user?.user_metadata?.name || user?.email}
             </span>
             <button
@@ -156,8 +180,12 @@ export function ChecklistDashboard({
         ) : (
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             {checklists.map((checklist) => {
-              const completed = checklist.items.filter((item) => item.completed).length;
-              const total = checklist.items.length;
+              // Calculate total items across all chapters
+              const allItems = checklist.chapters?.flatMap(ch => ch.items) || checklist.items || [];
+              const completed = allItems.filter((item) => 
+                item.status === 'compliant' || item.status === 'na'
+              ).length;
+              const total = allItems.length;
               const percentage = total > 0 ? Math.round((completed / total) * 100) : 0;
 
               return (

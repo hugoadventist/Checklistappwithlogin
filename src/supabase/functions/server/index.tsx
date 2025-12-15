@@ -3,6 +3,7 @@ import { cors } from 'npm:hono/cors';
 import { logger } from 'npm:hono/logger';
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import * as kv from './kv_store.tsx';
+import { NR12_TEMPLATE } from './nr12-template.ts';
 
 const app = new Hono();
 
@@ -33,28 +34,58 @@ initStorage();
 
 // Helper function to get user from access token
 async function getUser(request: Request) {
-  const accessToken = request.headers.get('Authorization')?.split(' ')[1];
+  const authHeader = request.headers.get('Authorization');
+  console.log('Auth header:', authHeader);
+  
+  const accessToken = authHeader?.split(' ')[1];
   if (!accessToken) {
+    console.log('No access token provided in Authorization header');
     return { user: null, error: 'No access token provided' };
   }
   
+  console.log('Attempting to verify user with access token');
   const { data: { user }, error } = await supabase.auth.getUser(accessToken);
-  if (error || !user) {
-    return { user: null, error: error?.message || 'Invalid token' };
+  
+  if (error) {
+    console.log('Auth error:', error.message);
+    return { user: null, error: error.message };
   }
   
+  if (!user) {
+    console.log('No user found for access token');
+    return { user: null, error: 'Invalid token' };
+  }
+  
+  console.log('User authenticated:', user.id);
   return { user, error: null };
 }
 
 // Auth routes
 app.post('/make-server-c4e14817/signup', async (c) => {
   try {
-    const { email, password, name } = await c.req.json();
+    const { email, password, name, isFirstAdmin } = await c.req.json();
+    
+    // Generate unique user code
+    const userCode = `USR${Date.now().toString().slice(-8)}${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
+    
+    // Check if this is the first user (make them admin)
+    let role = 'Employee';
+    if (isFirstAdmin) {
+      const existingUsers = await kv.getByPrefix('user:');
+      if (existingUsers.length === 0) {
+        role = 'Administrator';
+      }
+    }
     
     const { data, error } = await supabase.auth.admin.createUser({
       email,
       password,
-      user_metadata: { name },
+      user_metadata: { 
+        name,
+        user_code: userCode,
+        role,
+        profile_picture: null
+      },
       // Automatically confirm the user's email since an email server hasn't been configured.
       email_confirm: true
     });
@@ -63,6 +94,17 @@ app.post('/make-server-c4e14817/signup', async (c) => {
       console.log(`Signup error: ${error.message}`);
       return c.json({ error: error.message }, 400);
     }
+    
+    // Store user info in KV store for easy querying
+    await kv.set(`user:${data.user.id}`, {
+      id: data.user.id,
+      email: data.user.email,
+      name,
+      user_code: userCode,
+      role,
+      profile_picture: null,
+      createdAt: new Date().toISOString()
+    });
     
     return c.json({ user: data.user });
   } catch (error) {
@@ -96,12 +138,21 @@ app.post('/make-server-c4e14817/checklists', async (c) => {
     
     const { title } = await c.req.json();
     const checklistId = crypto.randomUUID();
+    
+    // Create checklist with NR-12 template
     const checklist = {
       id: checklistId,
       userId: user.id,
       title,
-      items: [],
-      createdAt: new Date().toISOString()
+      chapters: NR12_TEMPLATE.map(chapter => ({
+        ...chapter,
+        items: chapter.items.map(item => ({
+          ...item,
+          id: `${checklistId}-${item.id}`
+        }))
+      })),
+      createdAt: new Date().toISOString(),
+      lastSaved: new Date().toISOString()
     };
     
     await kv.set(`checklist:${user.id}:${checklistId}`, checklist);
@@ -271,6 +322,214 @@ app.get('/make-server-c4e14817/checklists/:id/export', async (c) => {
     return c.html(html);
   } catch (error) {
     console.log(`Export error: ${error.message}`);
+    return c.json({ error: error.message }, 500);
+  }
+});
+
+// User Management routes
+app.get('/make-server-c4e14817/users', async (c) => {
+  try {
+    const { user, error } = await getUser(c.req.raw);
+    if (error || !user) {
+      return c.json({ error: error || 'Unauthorized' }, 401);
+    }
+    
+    // Get current user's role
+    const currentUserData = await kv.get(`user:${user.id}`);
+    const currentRole = currentUserData?.role || user.user_metadata?.role || 'Employee';
+    
+    // Only Administrators and Managers can list users
+    if (currentRole !== 'Administrator' && currentRole !== 'Manager') {
+      return c.json({ error: 'Insufficient permissions' }, 403);
+    }
+    
+    const users = await kv.getByPrefix('user:');
+    return c.json({ users });
+  } catch (error) {
+    console.log(`Error fetching users: ${error.message}`);
+    return c.json({ error: error.message }, 500);
+  }
+});
+
+app.get('/make-server-c4e14817/users/me', async (c) => {
+  try {
+    const { user, error } = await getUser(c.req.raw);
+    if (error || !user) {
+      return c.json({ error: error || 'Unauthorized' }, 401);
+    }
+    
+    let userData = await kv.get(`user:${user.id}`);
+    
+    // If no data in KV store, create from user metadata
+    if (!userData) {
+      userData = {
+        id: user.id,
+        email: user.email,
+        name: user.user_metadata?.name,
+        user_code: user.user_metadata?.user_code,
+        role: user.user_metadata?.role || 'Employee',
+        profile_picture: user.user_metadata?.profile_picture,
+        createdAt: user.created_at
+      };
+      await kv.set(`user:${user.id}`, userData);
+    }
+    
+    return c.json({ user: userData });
+  } catch (error) {
+    console.log(`Error fetching user profile: ${error.message}`);
+    return c.json({ error: error.message }, 500);
+  }
+});
+
+app.put('/make-server-c4e14817/users/:id', async (c) => {
+  try {
+    const { user, error } = await getUser(c.req.raw);
+    if (error || !user) {
+      return c.json({ error: error || 'Unauthorized' }, 401);
+    }
+    
+    const targetUserId = c.req.param('id');
+    const { name, email } = await c.req.json();
+    
+    // Users can only edit their own profile, unless they're admin
+    const currentUserData = await kv.get(`user:${user.id}`);
+    const currentRole = currentUserData?.role || user.user_metadata?.role || 'Employee';
+    
+    if (user.id !== targetUserId && currentRole !== 'Administrator') {
+      return c.json({ error: 'Insufficient permissions' }, 403);
+    }
+    
+    const userData = await kv.get(`user:${targetUserId}`);
+    if (!userData) {
+      return c.json({ error: 'User not found' }, 404);
+    }
+    
+    // Update user data
+    const updatedData = {
+      ...userData,
+      name: name || userData.name,
+      email: email || userData.email
+    };
+    
+    await kv.set(`user:${targetUserId}`, updatedData);
+    
+    // Update auth user metadata
+    await supabase.auth.admin.updateUserById(targetUserId, {
+      email: email || userData.email,
+      user_metadata: {
+        ...userData,
+        name: name || userData.name
+      }
+    });
+    
+    return c.json({ user: updatedData });
+  } catch (error) {
+    console.log(`Error updating user: ${error.message}`);
+    return c.json({ error: error.message }, 500);
+  }
+});
+
+app.put('/make-server-c4e14817/users/:id/role', async (c) => {
+  try {
+    const { user, error } = await getUser(c.req.raw);
+    if (error || !user) {
+      return c.json({ error: error || 'Unauthorized' }, 401);
+    }
+    
+    // Only Administrators can change roles
+    const currentUserData = await kv.get(`user:${user.id}`);
+    const currentRole = currentUserData?.role || user.user_metadata?.role || 'Employee';
+    
+    if (currentRole !== 'Administrator') {
+      return c.json({ error: 'Only administrators can change user roles' }, 403);
+    }
+    
+    const targetUserId = c.req.param('id');
+    const { role } = await c.req.json();
+    
+    if (!['Administrator', 'Manager', 'Employee'].includes(role)) {
+      return c.json({ error: 'Invalid role' }, 400);
+    }
+    
+    const userData = await kv.get(`user:${targetUserId}`);
+    if (!userData) {
+      return c.json({ error: 'User not found' }, 404);
+    }
+    
+    const updatedData = { ...userData, role };
+    await kv.set(`user:${targetUserId}`, updatedData);
+    
+    // Update auth user metadata
+    await supabase.auth.admin.updateUserById(targetUserId, {
+      user_metadata: { ...userData, role }
+    });
+    
+    return c.json({ user: updatedData });
+  } catch (error) {
+    console.log(`Error updating user role: ${error.message}`);
+    return c.json({ error: error.message }, 500);
+  }
+});
+
+app.post('/make-server-c4e14817/users/:id/profile-picture', async (c) => {
+  try {
+    const { user, error } = await getUser(c.req.raw);
+    if (error || !user) {
+      return c.json({ error: error || 'Unauthorized' }, 401);
+    }
+    
+    const targetUserId = c.req.param('id');
+    
+    // Users can only change their own profile picture
+    if (user.id !== targetUserId) {
+      return c.json({ error: 'Insufficient permissions' }, 403);
+    }
+    
+    const formData = await c.req.formData();
+    const file = formData.get('file') as File;
+    
+    if (!file) {
+      return c.json({ error: 'No file provided' }, 400);
+    }
+    
+    const fileExt = file.name.split('.').pop();
+    const fileName = `profile-pictures/${user.id}/${crypto.randomUUID()}.${fileExt}`;
+    const fileBuffer = await file.arrayBuffer();
+    
+    const { data, error: uploadError } = await supabase.storage
+      .from(BUCKET_NAME)
+      .upload(fileName, fileBuffer, {
+        contentType: file.type,
+        upsert: true
+      });
+    
+    if (uploadError) {
+      console.log(`Profile picture upload error: ${uploadError.message}`);
+      return c.json({ error: uploadError.message }, 500);
+    }
+    
+    // Create signed URL valid for 1 year
+    const { data: urlData } = await supabase.storage
+      .from(BUCKET_NAME)
+      .createSignedUrl(fileName, 31536000);
+    
+    // Update user data
+    const userData = await kv.get(`user:${user.id}`);
+    const updatedData = {
+      ...userData,
+      profile_picture: urlData?.signedUrl
+    };
+    
+    await kv.set(`user:${user.id}`, updatedData);
+    
+    // Update auth user metadata
+    await supabase.auth.admin.updateUserById(user.id, {
+      user_metadata: { ...updatedData }
+    });
+    
+    return c.json({ profile_picture: urlData?.signedUrl });
+  } catch (error) {
+    console.log(`Profile picture upload error: ${error.message}`);
     return c.json({ error: error.message }, 500);
   }
 });

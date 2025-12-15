@@ -4,6 +4,8 @@ import { projectId, publicAnonKey } from './utils/supabase/info';
 import { LoginScreen } from './components/LoginScreen';
 import { ChecklistDashboard } from './components/ChecklistDashboard';
 import { ChecklistDetail } from './components/ChecklistDetail';
+import { UserProfile } from './components/UserProfile';
+import { UserManagement } from './components/UserManagement';
 
 const supabase = createClient(
   `https://${projectId}.supabase.co`,
@@ -13,17 +15,26 @@ const supabase = createClient(
 export interface ChecklistItem {
   id: string;
   text: string;
-  completed: boolean;
+  status: 'pending' | 'compliant' | 'non-compliant' | 'na';
+  mandatory: boolean;
+  observations: string;
   photoUrl?: string;
   photoPath?: string;
+}
+
+export interface ChecklistChapter {
+  id: string;
+  title: string;
+  items: ChecklistItem[];
 }
 
 export interface Checklist {
   id: string;
   userId: string;
   title: string;
-  items: ChecklistItem[];
+  chapters: ChecklistChapter[];
   createdAt: string;
+  lastSaved?: string;
 }
 
 export default function App() {
@@ -31,6 +42,8 @@ export default function App() {
   const [user, setUser] = useState<any>(null);
   const [selectedChecklist, setSelectedChecklist] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [currentView, setCurrentView] = useState<'dashboard' | 'profile' | 'user-management'>('dashboard');
+  const [userRole, setUserRole] = useState<string>('Employee');
 
   useEffect(() => {
     checkSession();
@@ -40,8 +53,12 @@ export default function App() {
     try {
       const { data, error } = await supabase.auth.getSession();
       if (data?.session?.access_token) {
+        console.log('Session found, access token set');
         setAccessToken(data.session.access_token);
         setUser(data.session.user);
+        setUserRole(data.session.user.user_metadata?.role || 'Employee');
+      } else {
+        console.log('No session found:', error);
       }
     } catch (error) {
       console.log('Session check error:', error);
@@ -62,6 +79,7 @@ export default function App() {
 
     setAccessToken(data.session.access_token);
     setUser(data.user);
+    setUserRole(data.user.user_metadata?.role || 'Employee');
   };
 
   const handleSignup = async (email: string, password: string, name: string) => {
@@ -73,7 +91,7 @@ export default function App() {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${publicAnonKey}`,
         },
-        body: JSON.stringify({ email, password, name }),
+        body: JSON.stringify({ email, password, name, isFirstAdmin: true }),
       }
     );
 
@@ -85,6 +103,16 @@ export default function App() {
 
     // Auto-login after signup
     await handleLogin(email, password);
+  };
+
+  const handleForgotPassword = async (email: string) => {
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `https://${projectId}.supabase.co`,
+    });
+
+    if (error) {
+      throw error;
+    }
   };
 
   const handleLogout = async () => {
@@ -103,7 +131,7 @@ export default function App() {
   }
 
   if (!accessToken) {
-    return <LoginScreen onLogin={handleLogin} onSignup={handleSignup} />;
+    return <LoginScreen onLogin={handleLogin} onSignup={handleSignup} onForgotPassword={handleForgotPassword} />;
   }
 
   if (selectedChecklist) {
@@ -117,12 +145,34 @@ export default function App() {
     );
   }
 
+  if (currentView === 'profile') {
+    return (
+      <UserProfile
+        accessToken={accessToken}
+        onBack={() => setCurrentView('dashboard')}
+      />
+    );
+  }
+
+  if (currentView === 'user-management') {
+    return (
+      <UserManagement
+        accessToken={accessToken}
+        currentUserRole={userRole}
+        onBack={() => setCurrentView('dashboard')}
+      />
+    );
+  }
+
   return (
     <ChecklistDashboard
       accessToken={accessToken}
       user={user}
       onSelectChecklist={setSelectedChecklist}
       onLogout={handleLogout}
+      onNavigateToProfile={() => setCurrentView('profile')}
+      onNavigateToUserManagement={() => setCurrentView('user-management')}
+      userRole={userRole}
     />
   );
 }
