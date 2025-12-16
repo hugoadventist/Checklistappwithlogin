@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NR-12 Checklist - Login</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
+  <style>
+    body {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .login-card {
+      background: white;
+      border-radius: 16px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+      max-width: 400px;
+      width: 100%;
+    }
+    .btn-primary {
+      background: #667eea;
+      border: none;
+    }
+    .btn-primary:hover {
+      background: #5568d3;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="login-card p-4 p-md-5 mx-auto">
+      <div class="text-center mb-4">
+        <i class="bi bi-check-square text-primary" style="font-size: 3rem;"></i>
+        <h1 class="h3 mt-3">NR-12 Checklist System</h1>
+        <p class="text-muted">Sign in to continue</p>
+      </div>
+
+      <form id="loginForm">
+        <div class="mb-3">
+          <label for="email" class="form-label">Email</label>
+          <input type="email" class="form-control" id="email" required>
+        </div>
+        <div class="mb-3">
+          <label for="password" class="form-label">Password</label>
+          <input type="password" class="form-control" id="password" required>
+        </div>
+        <button type="submit" class="btn btn-primary w-100 py-2 mb-3">
+          <span id="loginBtnText">Sign In</span>
+          <span id="loginSpinner" class="spinner-border spinner-border-sm d-none" role="status"></span>
+        </button>
+      </form>
+
+      <div class="text-center">
+        <p class="text-muted mb-0">Don't have an account?</p>
+        <a href="signup.html" class="text-decoration-none">Create Account</a>
+      </div>
+
+      <div id="errorAlert" class="alert alert-danger mt-3 d-none" role="alert"></div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="js/config.js"></script>
+  <script src="js/auth.js"></script>
+  <script>
+    document.getElementById('loginForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      
+      const email = document.getElementById('email').value;
+      const password = document.getElementById('password').value;
+      const btnText = document.getElementById('loginBtnText');
+      const spinner = document.getElementById('loginSpinner');
+      const errorAlert = document.getElementById('errorAlert');
+      
+      btnText.classList.add('d-none');
+      spinner.classList.remove('d-none');
+      errorAlert.classList.add('d-none');
+      
+      try {
+        const result = await signIn(email, password);
+        if (result.success) {
+          window.location.href = 'dashboard.html';
+        } else {
+          errorAlert.textContent = result.error;
+          errorAlert.classList.remove('d-none');
+        }
+      } catch (error) {
+        errorAlert.textContent = 'An error occurred. Please try again.';
+        errorAlert.classList.remove('d-none');
+      } finally {
+        btnText.classList.remove('d-none');
+        spinner.classList.add('d-none');
+      }
+    });
+  </script>
+</body>
+</html>

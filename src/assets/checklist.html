@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Checklist Details - NR-12</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
+  <style>
+    body {
+      background-color: #f8f9fa;
+    }
+    .navbar {
+      background-color: white;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    .chapter-header {
+      cursor: pointer;
+      transition: background-color 0.2s;
+    }
+    .chapter-header:hover {
+      background-color: #f8f9fa;
+    }
+    .item-pending { background-color: #fff8e1; border-color: #ffc107; }
+    .item-compliant { background-color: #e8f5e9; border-color: #4caf50; }
+    .item-non-compliant { background-color: #ffebee; border-color: #f44336; }
+    .item-na { background-color: #f5f5f5; border-color: #9e9e9e; }
+    .status-icon { font-size: 1.25rem; }
+    .photo-preview { max-width: 300px; border-radius: 8px; }
+    .sticky-header {
+      position: sticky;
+      top: 0;
+      z-index: 1000;
+      background-color: white;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+  </style>
+</head>
+<body>
+  <nav class="navbar sticky-header">
+    <div class="container-fluid px-4">
+      <div class="d-flex align-items-center gap-3">
+        <a href="dashboard.html" class="btn btn-outline-secondary">
+          <i class="bi bi-arrow-left me-1"></i> Back
+        </a>
+        <h5 class="mb-0" id="checklistTitle"></h5>
+      </div>
+      <div class="d-flex align-items-center gap-3">
+        <div id="saveStatus" class="text-muted">
+          <span id="saveText"></span>
+        </div>
+        <button class="btn btn-primary" id="exportBtn">
+          <i class="bi bi-file-earmark-text me-1"></i> Export Report
+        </button>
+        <button class="btn btn-outline-danger" id="logoutBtn">
+          <i class="bi bi-box-arrow-right"></i>
+        </button>
+      </div>
+    </div>
+  </nav>
+
+  <main class="container py-4" style="max-width: 1200px;">
+    <div id="loadingSpinner" class="text-center py-5">
+      <div class="spinner-border text-primary" role="status">
+        <span class="visually-hidden">Loading...</span>
+      </div>
+    </div>
+
+    <div id="checklistContent" class="d-none">
+      <!-- Validation Summary -->
+      <div id="validationSummary" class="alert mb-4"></div>
+
+      <!-- Chapters -->
+      <div id="chaptersContainer"></div>
+    </div>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="js/config.js"></script>
+  <script src="js/auth.js"></script>
+  <script>
+    const urlParams = new URLSearchParams(window.location.search);
+    const checklistId = urlParams.get('id');
+    const accessToken = getAccessToken();
+    
+    if (!accessToken || !checklistId) {
+      window.location.href = 'index.html';
+    }
+
+    let checklist = null;
+    let saveTimeout = null;
+    let isSaving = false;
+
+    async function loadChecklist() {
+      try {
+        const response = await fetch(`${API_URL}/checklists`, {
+          headers: { 'Authorization': `Bearer ${accessToken}` }
+        });
+        const data = await response.json();
+        
+        if (response.ok) {
+          checklist = data.checklists.find(c => c.id === checklistId);
+          if (checklist) {
+            renderChecklist();
+          } else {
+            alert('Checklist not found');
+            window.location.href = 'dashboard.html';
+          }
+        }
+      } catch (error) {
+        console.error('Error loading checklist:', error);
+      } finally {
+        document.getElementById('loadingSpinner').classList.add('d-none');
+        document.getElementById('checklistContent').classList.remove('d-none');
+      }
+    }
+
+    function renderChecklist() {
+      document.getElementById('checklistTitle').textContent = checklist.title;
+      renderValidationSummary();
+      renderChapters();
+    }
+
+    function renderValidationSummary() {
+      const validation = validateMandatoryItems();
+      const summaryDiv = document.getElementById('validationSummary');
+      
+      if (validation.missing.length === 0) {
+        summaryDiv.className = 'alert alert-success mb-4';
+        summaryDiv.innerHTML = `
+          <i class="bi bi-check-circle me-2"></i>
+          All mandatory items completed!
+        `;
+      } else {
+        summaryDiv.className = 'alert alert-warning mb-4';
+        summaryDiv.innerHTML = `
+          <i class="bi bi-exclamation-triangle me-2"></i>
+          ${validation.missing.length} mandatory item(s) pending (${validation.completed}/${validation.total} completed)
+        `;
+      }
+    }
+
+    function validateMandatoryItems() {
+      let totalMandatory = 0;
+      let completedMandatory = 0;
+      const missing = [];
+      
+      checklist.chapters.forEach(chapter => {
+        chapter.items.forEach(item => {
+          if (item.mandatory) {
+            totalMandatory++;
+            if (item.status === 'compliant' || item.status === 'na') {
+              completedMandatory++;
+            } else {
+              missing.push({ chapter: chapter.title, item: item.text });
+            }
+          }
+        });
+      });
+      
+      return { total: totalMandatory, completed: completedMandatory, missing };
+    }
+
+    function renderChapters() {
+      const container = document.getElementById('chaptersContainer');
+      container.innerHTML = checklist.chapters.map((chapter, chapterIdx) => {
+        const completed = chapter.items.filter(i => i.status === 'compliant' || i.status === 'na').length;
+        const total = chapter.items.length;
+        
+        return `
+          <div class="card mb-3">
+            <div class="card-header chapter-header" onclick="toggleChapter(${chapterIdx})">
+              <div class="d-flex justify-content-between align-items-center">
+                <div class="d-flex align-items-center gap-3">
+                  <h5 class="mb-0">${chapter.title}</h5>
+                  <span class="badge bg-secondary">${completed}/${total}</span>
+                </div>
+                <i class="bi bi-chevron-right" id="chevron-${chapterIdx}"></i>
+              </div>
+            </div>
+            <div class="collapse show" id="chapter-${chapterIdx}">
+              <div class="card-body p-0">
+                ${chapter.items.map((item, itemIdx) => renderItem(chapter, chapterIdx, item, itemIdx)).join('')}
+              </div>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function renderItem(chapter, chapterIdx, item, itemIdx) {
+      const statusClass = `item-${item.status}`;
+      const statusIcons = {
+        pending: '<i class="bi bi-clock text-warning status-icon"></i>',
+        compliant: '<i class="bi bi-check-circle text-success status-icon"></i>',
+        'non-compliant': '<i class="bi bi-x-circle text-danger status-icon"></i>',
+        na: '<i class="bi bi-dash-circle text-secondary status-icon"></i>'
+      };
+      
+      return `
+        <div class="border-bottom p-4 ${statusClass}">
+          <div class="d-flex gap-3">
+            ${statusIcons[item.status]}
+            <div class="flex-grow-1">
+              <p class="mb-2">
+                ${item.text}
+                ${item.mandatory ? '<span class="badge bg-danger ms-2">Mandatory</span>' : ''}
+              </p>
+              
+              <!-- Status Buttons -->
+              <div class="btn-group mb-3" role="group">
+                <button class="btn btn-sm ${item.status === 'compliant' ? 'btn-success' : 'btn-outline-success'}"
+                        onclick="updateStatus(${chapterIdx}, ${itemIdx}, 'compliant')">
+                  Compliant
+                </button>
+                <button class="btn btn-sm ${item.status === 'non-compliant' ? 'btn-danger' : 'btn-outline-danger'}"
+                        onclick="updateStatus(${chapterIdx}, ${itemIdx}, 'non-compliant')">
+                  Non-Compliant
+                </button>
+                <button class="btn btn-sm ${item.status === 'na' ? 'btn-secondary' : 'btn-outline-secondary'}"
+                        onclick="updateStatus(${chapterIdx}, ${itemIdx}, 'na')">
+                  N/A
+                </button>
+              </div>
+              
+              <!-- Observations -->
+              <div class="mb-3">
+                <label class="form-label">Observations / Markings:</label>
+                <textarea class="form-control" rows="3" 
+                          placeholder="Add observations, notes, or markings..."
+                          onchange="updateObservations(${chapterIdx}, ${itemIdx}, this.value)">${item.observations || ''}</textarea>
+              </div>
+              
+              <!-- Photo -->
+              <div>
+                ${item.photoUrl ? `
+                  <div class="position-relative d-inline-block">
+                    <img src="${item.photoUrl}" class="photo-preview border" alt="Item photo">
+                    <label class="btn btn-primary btn-sm position-absolute bottom-0 end-0 m-2" 
+                           for="photo-${chapterIdx}-${itemIdx}">
+                      <i class="bi bi-camera"></i>
+                    </label>
+                  </div>
+                ` : `
+                  <label class="btn btn-outline-secondary btn-sm" for="photo-${chapterIdx}-${itemIdx}">
+                    <i class="bi bi-camera me-1"></i> Add Photo
+                  </label>
+                `}
+                <input type="file" class="d-none" id="photo-${chapterIdx}-${itemIdx}" 
+                       accept="image/*" onchange="uploadPhoto(${chapterIdx}, ${itemIdx}, this.files[0])">
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function toggleChapter(idx) {
+      const collapse = document.getElementById(`chapter-${idx}`);
+      const chevron = document.getElementById(`chevron-${idx}`);
+      const bsCollapse = new bootstrap.Collapse(collapse, { toggle: true });
+      chevron.classList.toggle('bi-chevron-right');
+      chevron.classList.toggle('bi-chevron-down');
+    }
+
+    function updateStatus(chapterIdx, itemIdx, status) {
+      checklist.chapters[chapterIdx].items[itemIdx].status = status;
+      renderChecklist();
+      autoSave();
+    }
+
+    function updateObservations(chapterIdx, itemIdx, observations) {
+      checklist.chapters[chapterIdx].items[itemIdx].observations = observations;
+      autoSave();
+    }
+
+    async function uploadPhoto(chapterIdx, itemIdx, file) {
+      if (!file) return;
+      
+      const formData = new FormData();
+      formData.append('file', file);
+      
+      try {
+        const response = await fetch(`${API_URL}/photos/upload`, {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${accessToken}` },
+          body: formData
+        });
+        
+        const data = await response.json();
+        if (response.ok) {
+          checklist.chapters[chapterIdx].items[itemIdx].photoUrl = data.photoUrl;
+          checklist.chapters[chapterIdx].items[itemIdx].photoPath = data.path;
+          renderChecklist();
+          autoSave();
+        }
+      } catch (error) {
+        console.error('Error uploading photo:', error);
+        alert('Error uploading photo');
+      }
+    }
+
+    function autoSave() {
+      clearTimeout(saveTimeout);
+      document.getElementById('saveText').innerHTML = '<i class="bi bi-arrow-repeat spinner-border spinner-border-sm me-1"></i> Saving...';
+      
+      saveTimeout = setTimeout(async () => {
+        try {
+          const response = await fetch(`${API_URL}/checklists/${checklistId}`, {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${accessToken}`
+            },
+            body: JSON.stringify({
+              ...checklist,
+              lastSaved: new Date().toISOString()
+            })
+          });
+          
+          if (response.ok) {
+            const now = new Date().toLocaleTimeString();
+            document.getElementById('saveText').innerHTML = `<i class="bi bi-check-circle text-success me-1"></i> Saved at ${now}`;
+          } else {
+            document.getElementById('saveText').innerHTML = '<i class="bi bi-x-circle text-danger me-1"></i> Error saving';
+          }
+        } catch (error) {
+          console.error('Error saving:', error);
+          document.getElementById('saveText').innerHTML = '<i class="bi bi-x-circle text-danger me-1"></i> Error saving';
+        }
+      }, 1000);
+    }
+
+    document.getElementById('exportBtn').addEventListener('click', () => {
+      window.open(`${API_URL}/checklists/${checklistId}/export`, '_blank');
+    });
+
+    document.getElementById('logoutBtn').addEventListener('click', () => {
+      logout();
+      window.location.href = 'index.html';
+    });
+
+    loadChecklist();
+  </script>
+</body>
+</html>
