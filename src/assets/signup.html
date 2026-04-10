@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Sign Up - NR-12 Checklist</title>
+  <title>Criar Conta - Checklist NR-12</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
   <style>
@@ -36,33 +36,33 @@
     <div class="signup-card p-4 p-md-5 mx-auto">
       <div class="text-center mb-4">
         <i class="bi bi-check-square text-primary" style="font-size: 3rem;"></i>
-        <h1 class="h3 mt-3">Create Account</h1>
-        <p class="text-muted">Join NR-12 Checklist System</p>
+        <h1 class="h3 mt-3">Criar Conta</h1>
+        <p class="text-muted">Participe do Sistema de Checklist NR-12</p>
       </div>
 
       <form id="signupForm">
         <div class="mb-3">
-          <label for="name" class="form-label">Full Name</label>
+          <label for="name" class="form-label">Nome Completo</label>
           <input type="text" class="form-control" id="name" required>
         </div>
         <div class="mb-3">
-          <label for="email" class="form-label">Email</label>
+          <label for="email" class="form-label">E-mail</label>
           <input type="email" class="form-control" id="email" required>
         </div>
         <div class="mb-3">
-          <label for="password" class="form-label">Password</label>
+          <label for="password" class="form-label">Senha</label>
           <input type="password" class="form-control" id="password" required minlength="6">
-          <div class="form-text">At least 6 characters</div>
+          <div class="form-text">Pelo menos 6 caracteres</div>
         </div>
         <button type="submit" class="btn btn-primary w-100 py-2 mb-3">
-          <span id="signupBtnText">Create Account</span>
+          <span id="signupBtnText">Criar Conta</span>
           <span id="signupSpinner" class="spinner-border spinner-border-sm d-none" role="status"></span>
         </button>
       </form>
 
       <div class="text-center">
-        <p class="text-muted mb-0">Already have an account?</p>
-        <a href="index.html" class="text-decoration-none">Sign In</a>
+        <p class="text-muted mb-0">Já tem uma conta?</p>
+        <a href="index.html" class="text-decoration-none">Entrar</a>
       </div>
 
       <div id="errorAlert" class="alert alert-danger mt-3 d-none" role="alert"></div>
@@ -93,7 +93,7 @@
       try {
         const result = await signUp(email, password, name);
         if (result.success) {
-          successAlert.textContent = 'Account created successfully! Redirecting...';
+          successAlert.textContent = 'Conta criada com sucesso! Redirecionando...';
           successAlert.classList.remove('d-none');
           setTimeout(() => {
             window.location.href = 'index.html';
@@ -103,7 +103,7 @@
           errorAlert.classList.remove('d-none');
         }
       } catch (error) {
-        errorAlert.textContent = 'An error occurred. Please try again.';
+        errorAlert.textContent = 'Ocorreu um erro. Por favor, tente novamente.';
         errorAlert.classList.remove('d-none');
       } finally {
         btnText.classList.remove('d-none');

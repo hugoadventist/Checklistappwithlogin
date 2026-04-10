@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>My Profile - NR-12</title>
+  <title>Meu Perfil - NR-12</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
   <style>
@@ -37,10 +37,10 @@
       </a>
       <div class="d-flex align-items-center gap-3">
         <a href="dashboard.html" class="btn btn-outline-secondary">
-          <i class="bi bi-arrow-left me-1"></i> Back to Dashboard
+          <i class="bi bi-arrow-left me-1"></i> Voltar ao Dashboard
         </a>
         <button class="btn btn-outline-danger" id="logoutBtn">
-          <i class="bi bi-box-arrow-right me-1"></i> Logout
+          <i class="bi bi-box-arrow-right me-1"></i> Sair
         </button>
       </div>
     </div>
@@ -48,11 +48,11 @@
 
   <main class="container py-4" style="max-width: 800px;">
     <div class="profile-card p-4 p-md-5">
-      <h2 class="mb-4">My Profile</h2>
+      <h2 class="mb-4">Meu Perfil</h2>
       
       <div id="loadingSpinner" class="text-center py-5">
         <div class="spinner-border text-primary" role="status">
-          <span class="visually-hidden">Loading...</span>
+          <span class="visually-hidden">Carregando...</span>
         </div>
       </div>
 
@@ -73,35 +73,35 @@
         <!-- User Info -->
         <form id="profileForm">
           <div class="row mb-3">
-            <label class="col-sm-3 col-form-label">User Code</label>
+            <label class="col-sm-3 col-form-label">Código de Usuário</label>
             <div class="col-sm-9">
               <input type="text" class="form-control-plaintext" id="userCode" readonly>
             </div>
           </div>
 
           <div class="row mb-3">
-            <label class="col-sm-3 col-form-label">Role</label>
+            <label class="col-sm-3 col-form-label">Função</label>
             <div class="col-sm-9">
               <input type="text" class="form-control-plaintext" id="userRole" readonly>
             </div>
           </div>
 
           <div class="row mb-3">
-            <label for="userName" class="col-sm-3 col-form-label">Name</label>
+            <label for="userName" class="col-sm-3 col-form-label">Nome</label>
             <div class="col-sm-9">
               <input type="text" class="form-control" id="userName" required>
             </div>
           </div>
 
           <div class="row mb-3">
-            <label for="userEmail" class="col-sm-3 col-form-label">Email</label>
+            <label for="userEmail" class="col-sm-3 col-form-label">E-mail</label>
             <div class="col-sm-9">
               <input type="email" class="form-control" id="userEmail" required>
             </div>
           </div>
 
           <div class="row mb-3">
-            <label class="col-sm-3 col-form-label">Member Since</label>
+            <label class="col-sm-3 col-form-label">Membro Desde</label>
             <div class="col-sm-9">
               <input type="text" class="form-control-plaintext" id="memberSince" readonly>
             </div>
@@ -109,14 +109,14 @@
 
           <div class="text-end">
             <button type="submit" class="btn btn-primary px-4">
-              <span id="saveBtnText">Save Changes</span>
+              <span id="saveBtnText">Salvar Alterações</span>
               <span id="saveSpinner" class="spinner-border spinner-border-sm d-none" role="status"></span>
             </button>
           </div>
         </form>
 
         <div id="successAlert" class="alert alert-success mt-3 d-none">
-          Profile updated successfully!
+          Perfil atualizado com sucesso!
         </div>
         <div id="errorAlert" class="alert alert-danger mt-3 d-none"></div>
       </div>
@@ -144,10 +144,10 @@
         if (response.ok) {
           userId = data.user.id;
           document.getElementById('userCode').value = data.user.user_code || 'N/A';
-          document.getElementById('userRole').value = data.user.role || 'Employee';
+          document.getElementById('userRole').value = data.user.role || 'Funcionário';
           document.getElementById('userName').value = data.user.name || '';
           document.getElementById('userEmail').value = data.user.email || '';
-          document.getElementById('memberSince').value = new Date(data.user.createdAt).toLocaleDateString();
+          document.getElementById('memberSince').value = new Date(data.user.createdAt).toLocaleDateString('pt-BR');
           
           const profilePic = document.getElementById('profilePicture');
           if (data.user.profile_picture) {
@@ -194,11 +194,11 @@
           setTimeout(() => successAlert.classList.add('d-none'), 3000);
         } else {
           const data = await response.json();
-          errorAlert.textContent = data.error || 'Error updating profile';
+          errorAlert.textContent = data.error || 'Erro ao atualizar perfil';
           errorAlert.classList.remove('d-none');
         }
       } catch (error) {
-        errorAlert.textContent = 'Error updating profile';
+        errorAlert.textContent = 'Erro ao atualizar perfil';
         errorAlert.classList.remove('d-none');
       } finally {
         btnText.classList.remove('d-none');
