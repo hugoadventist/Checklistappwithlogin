@@ -6,6 +6,7 @@ import { ChecklistDashboard } from './components/ChecklistDashboard';
 import { ChecklistDetail } from './components/ChecklistDetail';
 import { UserProfile } from './components/UserProfile';
 import { UserManagement } from './components/UserManagement';
+import { redirectIfInvalid } from './utils/auth-interceptor';
 
 const supabase = createClient(
   `https://${projectId}.supabase.co`,
@@ -47,21 +48,44 @@ export default function App() {
 
   useEffect(() => {
     checkSession();
+
+    const { data: authListener } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        if (event === 'SIGNED_OUT') {
+          setAccessToken(null);
+          setUser(null);
+        } else if (event === 'SIGNED_IN' && session) {
+          // We don't rely solely on this for React state because we want to use HttpOnly cookies,
+          // but if Supabase triggers a SIGNED_IN, we can attempt to re-validate via our endpoint.
+        }
+      }
+    );
+
+    return () => {
+      authListener?.subscription.unsubscribe();
+    };
   }, []);
 
   const checkSession = async () => {
     try {
-      const { data, error } = await supabase.auth.getSession();
-      if (data?.session?.access_token) {
-        console.log('Session found, access token set');
-        setAccessToken(data.session.access_token);
-        setUser(data.session.user);
-        setUserRole(data.session.user.user_metadata?.role || 'Employee');
+      // Validate session via secure cookie endpoint
+      const response = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-c4e14817/validate-session`, {
+        credentials: 'include'
+      });
+      const data = await response.json();
+      
+      if (response.ok && data.valid && data.user) {
+        setAccessToken("cookie-auth");
+        setUser(data.user);
+        setUserRole(data.user.user_metadata?.role || 'Employee');
       } else {
-        console.log('No session found:', error);
+        // If not valid, but we thought we were authenticated, trigger redirect.
+        // On initial load, we just show LoginScreen, but if there's a reason, we handle it in LoginScreen.
+        setAccessToken(null);
       }
     } catch (error) {
       console.log('Session check error:', error);
+      setAccessToken(null);
     } finally {
       setLoading(false);
     }
@@ -77,7 +101,21 @@ export default function App() {
       throw error;
     }
 
-    setAccessToken(data.session.access_token);
+    if (data.session) {
+      // Call edge function to set HttpOnly cookie
+      const sessionResponse = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-c4e14817/auth-session`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ access_token: data.session.access_token })
+      });
+      
+      if (!sessionResponse.ok) {
+        throw new Error('Failed to establish secure session');
+      }
+    }
+
+    setAccessToken("cookie-auth");
     setUser(data.user);
     setUserRole(data.user.user_metadata?.role || 'Employee');
   };
@@ -120,6 +158,7 @@ export default function App() {
     setAccessToken(null);
     setUser(null);
     setSelectedChecklist(null);
+    // Optional: Call endpoint to clear HttpOnly cookie
   };
 
   if (loading) {
@@ -133,6 +172,7 @@ export default function App() {
   if (!accessToken) {
     return <LoginScreen onLogin={handleLogin} onSignup={handleSignup} onForgotPassword={handleForgotPassword} />;
   }
+
 
   if (selectedChecklist) {
     return (

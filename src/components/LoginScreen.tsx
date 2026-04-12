@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { LogIn } from 'lucide-react';
 
 interface LoginScreenProps {
@@ -17,6 +17,13 @@ export function LoginScreen({ onLogin, onSignup, onForgotPassword }: LoginScreen
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
 
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('reason') === 'expired') {
+      setError('Sua sessão expirou. Por favor, faça login novamente.');
+    }
+  }, []);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
@@ -30,7 +37,7 @@ export function LoginScreen({ onLogin, onSignup, onForgotPassword }: LoginScreen
         await onLogin(email, password);
       }
     } catch (err: any) {
-      setError(err.message || 'Authentication failed');
+      setError(err.message || 'Falha na autenticação');
     } finally {
       setLoading(false);
     }
@@ -44,9 +51,9 @@ export function LoginScreen({ onLogin, onSignup, onForgotPassword }: LoginScreen
 
     try {
       await onForgotPassword(email);
-      setSuccess('Password reset email sent! Check your inbox.');
+      setSuccess('E-mail de redefinição de senha enviado! Verifique sua caixa de entrada.');
     } catch (err: any) {
-      setError(err.message || 'Failed to send reset email');
+      setError(err.message || 'Falha ao enviar e-mail de redefinição');
     } finally {
       setLoading(false);
     }
@@ -62,15 +69,15 @@ export function LoginScreen({ onLogin, onSignup, onForgotPassword }: LoginScreen
             </div>
           </div>
 
-          <h1 className="text-center mb-2">Reset Password</h1>
+          <h1 className="text-center mb-2">Redefinir Senha</h1>
           <p className="text-center text-gray-600 mb-8">
-            Enter your email to receive a password reset link
+            Digite seu e-mail para receber um link de redefinição de senha
           </p>
 
           <form onSubmit={handleForgotPasswordSubmit} className="space-y-4">
             <div>
               <label htmlFor="email" className="block text-gray-700 mb-2">
-                Email
+                E-mail
               </label>
               <input
                 id="email"
@@ -99,7 +106,7 @@ export function LoginScreen({ onLogin, onSignup, onForgotPassword }: LoginScreen
               disabled={loading}
               className="w-full bg-indigo-600 text-white py-3 rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {loading ? 'Please wait...' : 'Send Reset Link'}
+              {loading ? 'Aguarde...' : 'Enviar Link de Redefinição'}
             </button>
           </form>
 
@@ -112,7 +119,7 @@ export function LoginScreen({ onLogin, onSignup, onForgotPassword }: LoginScreen
               }}
               className="text-indigo-600 hover:text-indigo-700"
             >
-              Back to sign in
+              Voltar para o login
             </button>
           </div>
         </div>
@@ -129,16 +136,16 @@ export function LoginScreen({ onLogin, onSignup, onForgotPassword }: LoginScreen
           </div>
         </div>
 
-        <h1 className="text-center mb-2">Checklist App</h1>
+        <h1 className="text-center mb-2">Sistema de Checklist</h1>
         <p className="text-center text-gray-600 mb-8">
-          {isSignup ? 'Create your account' : 'Sign in to continue'}
+          {isSignup ? 'Crie sua conta' : 'Faça login para continuar'}
         </p>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           {isSignup && (
             <div>
               <label htmlFor="name" className="block text-gray-700 mb-2">
-                Name
+                Nome
               </label>
               <input
                 id="name"
@@ -153,7 +160,7 @@ export function LoginScreen({ onLogin, onSignup, onForgotPassword }: LoginScreen
 
           <div>
             <label htmlFor="email" className="block text-gray-700 mb-2">
-              Email
+              E-mail
             </label>
             <input
               id="email"
@@ -168,7 +175,7 @@ export function LoginScreen({ onLogin, onSignup, onForgotPassword }: LoginScreen
           <div>
             <div className="flex items-center justify-between mb-2">
               <label htmlFor="password" className="block text-gray-700">
-                Password
+                Senha
               </label>
               {!isSignup && (
                 <button
@@ -176,7 +183,7 @@ export function LoginScreen({ onLogin, onSignup, onForgotPassword }: LoginScreen
                   onClick={() => setIsForgotPassword(true)}
                   className="text-indigo-600 hover:text-indigo-700"
                 >
-                  Forgot password?
+                  Esqueceu a senha?
                 </button>
               )}
             </div>
@@ -201,7 +208,7 @@ export function LoginScreen({ onLogin, onSignup, onForgotPassword }: LoginScreen
             disabled={loading}
             className="w-full bg-indigo-600 text-white py-3 rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {loading ? 'Please wait...' : isSignup ? 'Sign Up' : 'Sign In'}
+            {loading ? 'Aguarde...' : isSignup ? 'Criar Conta' : 'Entrar'}
           </button>
         </form>
 
@@ -214,8 +221,8 @@ export function LoginScreen({ onLogin, onSignup, onForgotPassword }: LoginScreen
             className="text-indigo-600 hover:text-indigo-700"
           >
             {isSignup
-              ? 'Already have an account? Sign in'
-              : "Don't have an account? Sign up"}
+              ? 'Já tem uma conta? Entrar'
+              : "Não tem uma conta? Criar Conta"}
           </button>
         </div>
       </div>

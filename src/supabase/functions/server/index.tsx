@@ -1,13 +1,19 @@
 import { Hono } from 'npm:hono';
 import { cors } from 'npm:hono/cors';
 import { logger } from 'npm:hono/logger';
+import { setCookie, getCookie } from 'npm:hono/cookie';
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import * as kv from './kv_store.tsx';
 import { NR12_TEMPLATE } from './nr12-template.ts';
 
 const app = new Hono();
 
-app.use('*', cors());
+app.use('*', cors({
+  origin: (origin) => origin || '*',
+  credentials: true,
+  allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowHeaders: ['Content-Type', 'Authorization', 'x-client-info', 'apikey'],
+}));
 app.use('*', logger(console.log));
 
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
@@ -37,9 +43,22 @@ async function getUser(request: Request) {
   const authHeader = request.headers.get('Authorization');
   console.log('Auth header:', authHeader);
   
-  const accessToken = authHeader?.split(' ')[1];
+  let accessToken = authHeader?.split(' ')[1];
+  
   if (!accessToken) {
-    console.log('No access token provided in Authorization header');
+    // Check cookies for access token
+    const cookieHeader = request.headers.get('Cookie');
+    if (cookieHeader) {
+      const match = cookieHeader.match(/nr12_access_token=([^;]+)/);
+      if (match) {
+        accessToken = match[1];
+        console.log('Access token found in cookies');
+      }
+    }
+  }
+
+  if (!accessToken) {
+    console.log('No access token provided in Authorization header or cookies');
     return { user: null, error: 'No access token provided' };
   }
   
@@ -59,6 +78,41 @@ async function getUser(request: Request) {
   console.log('User authenticated:', user.id);
   return { user, error: null };
 }
+
+// Auth Session endpoints
+app.post('/make-server-c4e14817/auth-session', async (c) => {
+  try {
+    const { access_token } = await c.req.json();
+    setCookie(c, 'nr12_access_token', access_token, {
+      httpOnly: true,
+      secure: true,
+      sameSite: 'Lax',
+      maxAge: 3600, // 1 hour match typical JWT
+      path: '/'
+    });
+    return c.json({ success: true });
+  } catch (err: any) {
+    return c.json({ error: err.message }, 500);
+  }
+});
+
+app.get('/make-server-c4e14817/validate-session', async (c) => {
+  try {
+    const token = getCookie(c, 'nr12_access_token');
+    if (!token) {
+      return c.json({ valid: false }, 401);
+    }
+    
+    const { data: { user }, error } = await supabase.auth.getUser(token);
+    if (error || !user) {
+      return c.json({ valid: false }, 401);
+    }
+    
+    return c.json({ valid: true, user });
+  } catch (err: any) {
+    return c.json({ valid: false, error: err.message }, 500);
+  }
+});
 
 // Auth routes
 app.post('/make-server-c4e14817/signup', async (c) => {

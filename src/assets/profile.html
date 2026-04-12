@@ -127,7 +127,6 @@
   <script src="js/config.js"></script>
   <script src="js/auth.js"></script>
   <script>
-    const accessToken = getAccessToken();
     if (!accessToken) {
       window.location.href = 'index.html';
     }
@@ -136,8 +135,7 @@
 
     async function loadProfile() {
       try {
-        const response = await fetch(`${API_URL}/users/me`, {
-          headers: { 'Authorization': `Bearer ${accessToken}` }
+        const response = await fetchWithAuth(`${API_URL}/users/me`, {
         });
         const data = await response.json();
         
@@ -180,11 +178,10 @@
       errorAlert.classList.add('d-none');
       
       try {
-        const response = await fetch(`${API_URL}/users/${userId}`, {
+        const response = await fetchWithAuth(`${API_URL}/users/${userId}`, {
           method: 'PUT',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${accessToken}`
           },
           body: JSON.stringify({ name, email })
         });
@@ -214,9 +211,8 @@
       formData.append('file', file);
       
       try {
-        const response = await fetch(`${API_URL}/users/${userId}/profile-picture`, {
+        const response = await fetchWithAuth(`${API_URL}/users/${userId}/profile-picture`, {
           method: 'POST',
-          headers: { 'Authorization': `Bearer ${accessToken}` },
           body: formData
         });
         

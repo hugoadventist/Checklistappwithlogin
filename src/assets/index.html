@@ -67,6 +67,18 @@
   <script src="js/config.js"></script>
   <script src="js/auth.js"></script>
   <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      const urlParams = new URLSearchParams(window.location.search);
+      const reason = urlParams.get('reason');
+      if (reason === 'expired') {
+        const errorAlert = document.getElementById('errorAlert');
+        errorAlert.textContent = 'Sua sessão expirou. Por favor, faça login novamente.';
+        errorAlert.classList.remove('alert-danger');
+        errorAlert.classList.add('alert-warning');
+        errorAlert.classList.remove('d-none');
+      }
+    });
+
     document.getElementById('loginForm').addEventListener('submit', async (e) => {
       e.preventDefault();
       

@@ -1,3 +1,9 @@
 node_modules
 .gemini
 specs
+
+# Added missing common patterns for Node.js
+dist/
+build/
+*.log
+.env*

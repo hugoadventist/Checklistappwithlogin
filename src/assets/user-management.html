@@ -136,7 +136,6 @@
   <script src="js/config.js"></script>
   <script src="js/auth.js"></script>
   <script>
-    const accessToken = getAccessToken();
     if (!accessToken) {
       window.location.href = 'index.html';
     }
@@ -147,8 +146,7 @@
 
     async function checkPermissions() {
       try {
-        const response = await fetch(`${API_URL}/users/me`, {
-          headers: { 'Authorization': `Bearer ${accessToken}` }
+        const response = await fetchWithAuth(`${API_URL}/users/me`, {
         });
         const data = await response.json();
         
@@ -166,8 +164,7 @@
 
     async function loadUsers() {
       try {
-        const response = await fetch(`${API_URL}/users`, {
-          headers: { 'Authorization': `Bearer ${accessToken}` }
+        const response = await fetchWithAuth(`${API_URL}/users`, {
         });
         const data = await response.json();
         
@@ -252,22 +249,20 @@
       
       try {
         // Update basic info
-        const response1 = await fetch(`${API_URL}/users/${userId}`, {
+        const response1 = await fetchWithAuth(`${API_URL}/users/${userId}`, {
           method: 'PUT',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${accessToken}`
           },
           body: JSON.stringify({ name, email })
         });
         
         // Update role if changed and user is Administrator
         if (roleChanged && currentUser.role === 'Administrator') {
-          const response2 = await fetch(`${API_URL}/users/${userId}/role`, {
+          const response2 = await fetchWithAuth(`${API_URL}/users/${userId}/role`, {
             method: 'PUT',
             headers: {
               'Content-Type': 'application/json',
-              'Authorization': `Bearer ${accessToken}`
             },
             body: JSON.stringify({ role: newRole })
           });

@@ -81,7 +81,6 @@
   <script>
     const urlParams = new URLSearchParams(window.location.search);
     const checklistId = urlParams.get('id');
-    const accessToken = getAccessToken();
     
     if (!accessToken || !checklistId) {
       window.location.href = 'index.html';
@@ -93,8 +92,7 @@
 
     async function loadChecklist() {
       try {
-        const response = await fetch(`${API_URL}/checklists`, {
-          headers: { 'Authorization': `Bearer ${accessToken}` }
+        const response = await fetchWithAuth(`${API_URL}/checklists`, {
         });
         const data = await response.json();
         
@@ -281,9 +279,8 @@
       formData.append('file', file);
       
       try {
-        const response = await fetch(`${API_URL}/photos/upload`, {
+        const response = await fetchWithAuth(`${API_URL}/photos/upload`, {
           method: 'POST',
-          headers: { 'Authorization': `Bearer ${accessToken}` },
           body: formData
         });
         
@@ -306,11 +303,10 @@
       
       saveTimeout = setTimeout(async () => {
         try {
-          const response = await fetch(`${API_URL}/checklists/${checklistId}`, {
+          const response = await fetchWithAuth(`${API_URL}/checklists/${checklistId}`, {
             method: 'PUT',
             headers: {
               'Content-Type': 'application/json',
-              'Authorization': `Bearer ${accessToken}`
             },
             body: JSON.stringify({
               ...checklist,

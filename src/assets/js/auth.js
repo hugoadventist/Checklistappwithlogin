@@ -1,5 +1,24 @@
 // Authentication utilities
 
+let isRedirecting = false;
+function redirectIfInvalid(reason = 'expired') {
+  if (isRedirecting) return;
+  isRedirecting = true;
+  localStorage.removeItem(STORAGE_KEYS.USER_DATA);
+  window.location.href = `index.html?reason=${encodeURIComponent(reason)}`;
+}
+
+// Custom fetch wrapper to handle 401s and cookies
+async function fetchWithAuth(url, options = {}) {
+  options.credentials = 'include';
+  
+  const response = await fetch(url, options);
+  if (response.status === 401 || response.status === 403) {
+    redirectIfInvalid('expired');
+  }
+  return response;
+}
+
 // Sign up function
 async function signUp(email, password, name) {
   try {
@@ -52,8 +71,18 @@ async function signIn(email, password) {
     }
 
     if (data.access_token) {
-      // Store access token
-      localStorage.setItem(STORAGE_KEYS.ACCESS_TOKEN, data.access_token);
+      // Call edge function to set HttpOnly cookie
+      const sessionResponse = await fetch(`${API_URL}/auth-session`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ access_token: data.access_token })
+      });
+      
+      if (!sessionResponse.ok) {
+        return { success: false, error: 'Failed to establish secure session' };
+      }
+
       localStorage.setItem(STORAGE_KEYS.USER_DATA, JSON.stringify(data.user));
       return { success: true, session: data };
     }
@@ -65,9 +94,9 @@ async function signIn(email, password) {
   }
 }
 
-// Get stored access token
+// Get stored access token (Deprecated: using cookies now)
 function getAccessToken() {
-  return localStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN);
+  return null;
 }
 
 // Get stored user data
@@ -78,11 +107,19 @@ function getUserData() {
 
 // Logout function
 function logout() {
-  localStorage.removeItem(STORAGE_KEYS.ACCESS_TOKEN);
   localStorage.removeItem(STORAGE_KEYS.USER_DATA);
+  // Optional: Call endpoint to clear cookie
+  window.location.href = 'index.html';
 }
 
-// Check if user is authenticated
-function isAuthenticated() {
-  return !!getAccessToken();
+// Check if user is authenticated via validation endpoint
+async function isAuthenticated() {
+  try {
+    const response = await fetch(`${API_URL}/validate-session`, {
+      credentials: 'include'
+    });
+    return response.ok;
+  } catch (e) {
+    return false;
+  }
 }
