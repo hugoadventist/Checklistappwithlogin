@@ -14,7 +14,7 @@ const SUPABASE_URL = `https://${SUPABASE_PROJECT_ID}.supabase.co`;
 const SUPABASE_ANON_KEY = 'your-anon-key-here'; // Starts with 'eyJ...'
 
 // API Base URL (don't change this unless you modified the backend route)
-const API_URL = `${SUPABASE_URL}/functions/v1/make-server-c4e14817`;
+const API_URL = `${SUPABASE_URL}/functions/v1/api-server`;
 
 // Storage keys for localStorage (don't change these)
 const STORAGE_KEYS = {

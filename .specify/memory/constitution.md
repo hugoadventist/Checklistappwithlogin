@@ -63,3 +63,9 @@ All Pull Requests and code changes must adhere to this Constitution. The princip
 Amendments require documentation, approval, and an increment of the Constitution Version using semantic versioning.
 
 **Version**: 1.1.0 | **Ratified**: 2026-04-07 | **Last Amended**: 2026-04-08
+
+### VIII. Runtime Isolation (Node vs Deno)
+The project maintains a strict boundary between the Frontend (Node.js/Vite) and Backend (Deno/Edge Functions).
+- The root `package.json` MUST ONLY contain frontend dependencies.
+- Backend dependencies MUST be managed via Deno-native mechanisms (JSR, URL imports, or `import_map.json`) within the `/supabase` directory.
+- No backend framework (e.g., Hono) should ever be installed via `npm` in the project root.

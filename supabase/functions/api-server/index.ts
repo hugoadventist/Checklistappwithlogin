@@ -3,16 +3,20 @@ import { cors } from 'npm:hono/cors';
 import { logger } from 'npm:hono/logger';
 import { setCookie, getCookie } from 'npm:hono/cookie';
 import { createClient } from 'npm:@supabase/supabase-js@2';
-import * as kv from './kv_store.tsx';
-import { NR12_TEMPLATE } from './nr12-template.ts';
+import * as kv from '../_shared/kv_store.ts';
+import { NR12_TEMPLATE } from '../_shared/nr12-template.ts';
+import { corsHeaders } from '../_shared/cors.ts';
 
 const app = new Hono();
 
 app.use('*', cors({
-  origin: (origin) => origin || '*',
+  origin: (origin) => {
+    return origin && origin !== 'null' ? origin : 'http://localhost:3000';
+  },
   credentials: true,
   allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowHeaders: ['Content-Type', 'Authorization', 'x-client-info', 'apikey'],
+  allowHeaders: ['Content-Type', 'Authorization', 'x-client-info', 'apikey', 'cookie'],
+  exposeHeaders: ['set-cookie'],
 }));
 app.use('*', logger(console.log));
 
@@ -80,7 +84,7 @@ async function getUser(request: Request) {
 }
 
 // Auth Session endpoints
-app.post('/make-server-c4e14817/auth-session', async (c) => {
+app.post('/api-server/auth-session', async (c) => {
   try {
     const { access_token } = await c.req.json();
     setCookie(c, 'nr12_access_token', access_token, {
@@ -96,7 +100,7 @@ app.post('/make-server-c4e14817/auth-session', async (c) => {
   }
 });
 
-app.get('/make-server-c4e14817/validate-session', async (c) => {
+app.get('/api-server/validate-session', async (c) => {
   try {
     const token = getCookie(c, 'nr12_access_token');
     if (!token) {
@@ -115,7 +119,7 @@ app.get('/make-server-c4e14817/validate-session', async (c) => {
 });
 
 // Auth routes
-app.post('/make-server-c4e14817/signup', async (c) => {
+app.post('/api-server/signup', async (c) => {
   try {
     const { email, password, name, isFirstAdmin } = await c.req.json();
     
@@ -168,7 +172,7 @@ app.post('/make-server-c4e14817/signup', async (c) => {
 });
 
 // Checklist routes
-app.get('/make-server-c4e14817/checklists', async (c) => {
+app.get('/api-server/checklists', async (c) => {
   try {
     const { user, error } = await getUser(c.req.raw);
     if (error || !user) {
@@ -183,7 +187,7 @@ app.get('/make-server-c4e14817/checklists', async (c) => {
   }
 });
 
-app.post('/make-server-c4e14817/checklists', async (c) => {
+app.post('/api-server/checklists', async (c) => {
   try {
     const { user, error } = await getUser(c.req.raw);
     if (error || !user) {
@@ -217,7 +221,7 @@ app.post('/make-server-c4e14817/checklists', async (c) => {
   }
 });
 
-app.put('/make-server-c4e14817/checklists/:id', async (c) => {
+app.put('/api-server/checklists/:id', async (c) => {
   try {
     const { user, error } = await getUser(c.req.raw);
     if (error || !user) {
@@ -241,7 +245,7 @@ app.put('/make-server-c4e14817/checklists/:id', async (c) => {
   }
 });
 
-app.delete('/make-server-c4e14817/checklists/:id', async (c) => {
+app.delete('/api-server/checklists/:id', async (c) => {
   try {
     const { user, error } = await getUser(c.req.raw);
     if (error || !user) {
@@ -258,7 +262,7 @@ app.delete('/make-server-c4e14817/checklists/:id', async (c) => {
 });
 
 // Photo upload route
-app.post('/make-server-c4e14817/photos/upload', async (c) => {
+app.post('/api-server/photos/upload', async (c) => {
   try {
     const { user, error } = await getUser(c.req.raw);
     if (error || !user) {
@@ -300,7 +304,7 @@ app.post('/make-server-c4e14817/photos/upload', async (c) => {
 });
 
 // Export report route
-app.get('/make-server-c4e14817/checklists/:id/export', async (c) => {
+app.get('/api-server/checklists/:id/export', async (c) => {
   try {
     const { user, error } = await getUser(c.req.raw);
     if (error || !user) {
@@ -381,7 +385,7 @@ app.get('/make-server-c4e14817/checklists/:id/export', async (c) => {
 });
 
 // User Management routes
-app.get('/make-server-c4e14817/users', async (c) => {
+app.get('/api-server/users', async (c) => {
   try {
     const { user, error } = await getUser(c.req.raw);
     if (error || !user) {
@@ -405,7 +409,7 @@ app.get('/make-server-c4e14817/users', async (c) => {
   }
 });
 
-app.get('/make-server-c4e14817/users/me', async (c) => {
+app.get('/api-server/users/me', async (c) => {
   try {
     const { user, error } = await getUser(c.req.raw);
     if (error || !user) {
@@ -435,7 +439,7 @@ app.get('/make-server-c4e14817/users/me', async (c) => {
   }
 });
 
-app.put('/make-server-c4e14817/users/:id', async (c) => {
+app.put('/api-server/users/:id', async (c) => {
   try {
     const { user, error } = await getUser(c.req.raw);
     if (error || !user) {
@@ -483,7 +487,7 @@ app.put('/make-server-c4e14817/users/:id', async (c) => {
   }
 });
 
-app.put('/make-server-c4e14817/users/:id/role', async (c) => {
+app.put('/api-server/users/:id/role', async (c) => {
   try {
     const { user, error } = await getUser(c.req.raw);
     if (error || !user) {
@@ -525,7 +529,7 @@ app.put('/make-server-c4e14817/users/:id/role', async (c) => {
   }
 });
 
-app.post('/make-server-c4e14817/users/:id/profile-picture', async (c) => {
+app.post('/api-server/users/:id/profile-picture', async (c) => {
   try {
     const { user, error } = await getUser(c.req.raw);
     if (error || !user) {

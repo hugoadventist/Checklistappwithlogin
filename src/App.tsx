@@ -69,7 +69,7 @@ export default function App() {
   const checkSession = async () => {
     try {
       // Validate session via secure cookie endpoint
-      const response = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-c4e14817/validate-session`, {
+      const response = await fetch(`https://${projectId}.supabase.co/functions/v1/api-server/validate-session`, {
         credentials: 'include'
       });
       const data = await response.json();
@@ -103,7 +103,7 @@ export default function App() {
 
     if (data.session) {
       // Call edge function to set HttpOnly cookie
-      const sessionResponse = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-c4e14817/auth-session`, {
+      const sessionResponse = await fetch(`https://${projectId}.supabase.co/functions/v1/api-server/auth-session`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -122,7 +122,7 @@ export default function App() {
 
   const handleSignup = async (email: string, password: string, name: string) => {
     const response = await fetch(
-      `https://${projectId}.supabase.co/functions/v1/make-server-c4e14817/signup`,
+      `https://${projectId}.supabase.co/functions/v1/api-server/signup`,
       {
         method: 'POST',
         headers: {

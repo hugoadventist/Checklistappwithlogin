@@ -35,7 +35,7 @@ You can find these values in your Supabase project dashboard under Settings > AP
 
 Make sure the backend server is deployed and running. The backend should be accessible at:
 ```
-https://your-project-id.supabase.co/functions/v1/make-server-c4e14817
+https://your-project-id.supabase.co/functions/v1/api-server
 ```
 
 ### 3. Serve the Static Files

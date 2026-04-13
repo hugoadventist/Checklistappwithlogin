@@ -15,7 +15,7 @@ export function redirectIfInvalid(reason: string = 'expired') {
     const originalFetch = window.fetch;
     window.fetch = async function (...args) {
       // Add credentials: 'include' by default for API calls to our backend
-      if (typeof args[0] === 'string' && args[0].includes('make-server-c4e14817')) {
+      if (typeof args[0] === 'string' && args[0].includes('api-server')) {
         args[1] = args[1] || {};
         args[1].credentials = 'include';
       }

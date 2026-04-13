@@ -31,7 +31,7 @@ export function UserManagement({ accessToken, currentUserRole, onBack }: UserMan
   const fetchUsers = async () => {
     try {
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-c4e14817/users`,
+        `https://${projectId}.supabase.co/functions/v1/api-server/users`,
         {
           headers: {
             'Authorization': `Bearer ${accessToken}`,
@@ -57,7 +57,7 @@ export function UserManagement({ accessToken, currentUserRole, onBack }: UserMan
   const handleRoleChange = async (userId: string, newRole: string) => {
     try {
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-c4e14817/users/${userId}/role`,
+        `https://${projectId}.supabase.co/functions/v1/api-server/users/${userId}/role`,
         {
           method: 'PUT',
           headers: {

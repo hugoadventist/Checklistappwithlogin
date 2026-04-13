@@ -35,7 +35,7 @@ export function ChecklistDashboard({
   const fetchChecklists = async () => {
     try {
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-c4e14817/checklists`,
+        `https://${projectId}.supabase.co/functions/v1/api-server/checklists`,
         {
           headers: {
             'Authorization': `Bearer ${accessToken}`,
@@ -66,7 +66,7 @@ export function ChecklistDashboard({
 
     try {
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-c4e14817/checklists`,
+        `https://${projectId}.supabase.co/functions/v1/api-server/checklists`,
         {
           method: 'POST',
           headers: {
@@ -96,7 +96,7 @@ export function ChecklistDashboard({
 
     try {
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-c4e14817/checklists/${id}`,
+        `https://${projectId}.supabase.co/functions/v1/api-server/checklists/${id}`,
         {
           method: 'DELETE',
           headers: {

@@ -32,7 +32,7 @@ export function UserProfile({ accessToken, onBack }: UserProfileProps) {
   const fetchUserData = async () => {
     try {
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-c4e14817/users/me`,
+        `https://${projectId}.supabase.co/functions/v1/api-server/users/me`,
         {
           headers: {
             'Authorization': `Bearer ${accessToken}`,
@@ -63,7 +63,7 @@ export function UserProfile({ accessToken, onBack }: UserProfileProps) {
 
     try {
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-c4e14817/users/${userData?.id}`,
+        `https://${projectId}.supabase.co/functions/v1/api-server/users/${userData?.id}`,
         {
           method: 'PUT',
           headers: {
@@ -106,7 +106,7 @@ export function UserProfile({ accessToken, onBack }: UserProfileProps) {
       formData.append('file', file);
 
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-c4e14817/users/${userData?.id}/profile-picture`,
+        `https://${projectId}.supabase.co/functions/v1/api-server/users/${userData?.id}/profile-picture`,
         {
           method: 'POST',
           headers: {
