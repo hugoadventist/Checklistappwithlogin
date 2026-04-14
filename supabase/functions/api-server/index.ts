@@ -1,36 +1,9 @@
-import { Hono } from 'hono';
-import { cors } from 'hono/cors';
-import { logger } from 'hono/logger';
-import { setCookie, getCookie } from 'hono/cookie';
+import { corsHeaders } from 'https://esm.sh/@supabase/supabase-js@2/cors';
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import * as kv from '../_shared/kv_store.ts';
 import { NR12_TEMPLATE } from '../_shared/nr12-template.ts';
 
-const app = new Hono();
-
-// Get origin from environment or use localhost for development
-const getAllowedOrigins = (): string[] => {
-  const prodOrigin = Deno.env.get('PROD_URL') || '';
-  const origins = ['http://localhost:3000', 'http://localhost:5173'];
-  if (prodOrigin) origins.push(prodOrigin);
-  return origins;
-};
-
-const allowedOrigins = getAllowedOrigins();
-
-app.use('*', cors({
-  origin: (origin) => {
-    // Allow specific origins, not wildcard, to support credentials
-    if (!origin) return 'http://localhost:3000';
-    return allowedOrigins.includes(origin) ? origin : allowedOrigins[0];
-  },
-  credentials: true,
-  allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowHeaders: ['Content-Type', 'Authorization', 'x-client-info', 'apikey', 'cookie'],
-  exposeHeaders: ['set-cookie', 'Content-Type'],
-  maxAge: 86400,
-}));
-app.use('*', logger(console.log));
+console.log(`Function "api-server" up and running!`);
 
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
 const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -40,15 +13,19 @@ const supabase = createClient(supabaseUrl, supabaseServiceKey);
 const BUCKET_NAME = 'make-c4e14817-checklist-photos';
 
 async function initStorage() {
-  const { data: buckets } = await supabase.storage.listBuckets();
-  const bucketExists = buckets?.some(bucket => bucket.name === BUCKET_NAME);
-  
-  if (!bucketExists) {
-    const { error } = await supabase.storage.createBucket(BUCKET_NAME, {
-      public: false,
-      fileSizeLimit: 5242880 // 5MB
-    });
-    if (error) console.log(`Error creating bucket: ${error.message}`);
+  try {
+    const { data: buckets } = await supabase.storage.listBuckets();
+    const bucketExists = buckets?.some(bucket => bucket.name === BUCKET_NAME);
+    
+    if (!bucketExists) {
+      const { error } = await supabase.storage.createBucket(BUCKET_NAME, {
+        public: false,
+        fileSizeLimit: 5242880 // 5MB
+      });
+      if (error) console.log(`Error creating bucket: ${error.message}`);
+    }
+  } catch (error) {
+    console.log(`Storage initialization error: ${error.message}`);
   }
 }
 
@@ -56,285 +33,423 @@ initStorage();
 
 // Helper function to get user from access token
 async function getUser(request: Request) {
-  const authHeader = request.headers.get('Authorization');
-  console.log('Auth header:', authHeader);
-  
-  let accessToken = authHeader?.split(' ')[1];
-  
-  if (!accessToken) {
-    // Check cookies for access token
-    const cookieHeader = request.headers.get('Cookie');
-    if (cookieHeader) {
-      const match = cookieHeader.match(/nr12_access_token=([^;]+)/);
-      if (match) {
-        accessToken = match[1];
-        console.log('Access token found in cookies');
+  try {
+    const authHeader = request.headers.get('Authorization');
+    console.log('Auth header present:', !!authHeader);
+    
+    let accessToken = authHeader?.split(' ')[1];
+    
+    if (!accessToken) {
+      // Check cookies for access token
+      const cookieHeader = request.headers.get('Cookie');
+      if (cookieHeader) {
+        const match = cookieHeader.match(/nr12_access_token=([^;]+)/);
+        if (match) {
+          accessToken = match[1];
+          console.log('Access token found in cookies');
+        }
       }
     }
-  }
 
-  if (!accessToken) {
-    console.log('No access token provided in Authorization header or cookies');
-    return { user: null, error: 'No access token provided' };
-  }
-  
-  console.log('Attempting to verify user with access token');
-  const { data: { user }, error } = await supabase.auth.getUser(accessToken);
-  
-  if (error) {
-    console.log('Auth error:', error.message);
-    return { user: null, error: error.message };
-  }
-  
-  if (!user) {
-    console.log('No user found for access token');
-    return { user: null, error: 'Invalid token' };
-  }
-  
-  console.log('User authenticated:', user.id);
-  return { user, error: null };
-}
-
-// Auth Session endpoints
-app.post('/api-server/auth-session', async (c) => {
-  try {
-    const { access_token } = await c.req.json();
-    setCookie(c, 'nr12_access_token', access_token, {
-      httpOnly: true,
-      secure: true,
-      sameSite: 'Lax',
-      maxAge: 3600, // 1 hour match typical JWT
-      path: '/'
-    });
-    return c.json({ success: true });
-  } catch (err: any) {
-    return c.json({ error: err.message }, 500);
-  }
-});
-
-app.get('/api-server/validate-session', async (c) => {
-  try {
-    const token = getCookie(c, 'nr12_access_token');
-    if (!token) {
-      return c.json({ valid: false }, 401);
+    if (!accessToken) {
+      console.log('No access token provided');
+      return { user: null, error: 'No access token provided' };
     }
     
-    const { data: { user }, error } = await supabase.auth.getUser(token);
-    if (error || !user) {
-      return c.json({ valid: false }, 401);
-    }
-    
-    return c.json({ valid: true, user });
-  } catch (err: any) {
-    return c.json({ valid: false, error: err.message }, 500);
-  }
-});
-
-// Auth routes
-app.post('/api-server/signup', async (c) => {
-  try {
-    const { email, password, name, isFirstAdmin } = await c.req.json();
-    
-    // Generate unique user code
-    const userCode = `USR${Date.now().toString().slice(-8)}${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
-    
-    // Check if this is the first user (make them admin)
-    let role = 'Employee';
-    if (isFirstAdmin) {
-      const existingUsers = await kv.getByPrefix('user:');
-      if (existingUsers.length === 0) {
-        role = 'Administrator';
-      }
-    }
-    
-    const { data, error } = await supabase.auth.admin.createUser({
-      email,
-      password,
-      user_metadata: { 
-        name,
-        user_code: userCode,
-        role,
-        profile_picture: null
-      },
-      // Automatically confirm the user's email since an email server hasn't been configured.
-      email_confirm: true
-    });
+    console.log('Attempting to verify user with access token');
+    const { data: { user }, error } = await supabase.auth.getUser(accessToken);
     
     if (error) {
-      console.log(`Signup error: ${error.message}`);
-      return c.json({ error: error.message }, 400);
+      console.log('Auth error:', error.message);
+      return { user: null, error: error.message };
     }
     
-    // Store user info in KV store for easy querying
-    await kv.set(`user:${data.user.id}`, {
-      id: data.user.id,
-      email: data.user.email,
-      name,
-      user_code: userCode,
-      role,
-      profile_picture: null,
-      createdAt: new Date().toISOString()
-    });
+    if (!user) {
+      console.log('No user found for access token');
+      return { user: null, error: 'Invalid token' };
+    }
     
-    return c.json({ user: data.user });
-  } catch (error) {
-    console.log(`Signup error: ${error.message}`);
-    return c.json({ error: error.message }, 500);
+    console.log('User authenticated:', user.id);
+    return { user, error: null };
+  } catch (error: any) {
+    console.log('Error in getUser:', error.message);
+    return { user: null, error: error.message };
   }
-});
+}
 
-// Checklist routes
-app.get('/api-server/checklists', async (c) => {
-  try {
-    const { user, error } = await getUser(c.req.raw);
-    if (error || !user) {
-      return c.json({ error: error || 'Unauthorized' }, 401);
-    }
-    
-    const checklists = await kv.getByPrefix(`checklist:${user.id}:`);
-    return c.json({ checklists });
-  } catch (error) {
-    console.log(`Error fetching checklists: ${error.message}`);
-    return c.json({ error: error.message }, 500);
+// Helper to set cookie in response headers
+function setCookieHeader(name: string, value: string, maxAge: number = 3600) {
+  return `${name}=${value}; Path=/; Max-Age=${maxAge}; HttpOnly; Secure; SameSite=Lax`;
+}
+
+// Parse URL and method for routing
+function parseRequest(req: Request) {
+  const url = new URL(req.url);
+  const path = url.pathname;
+  const method = req.method;
+  
+  // Extract path segments after /api-server/
+  const pathSegments = path.split('/').filter(Boolean);
+  const apiIndex = pathSegments.indexOf('api-server');
+  const routePath = `/${pathSegments.slice(apiIndex + 1).join('/')}`;
+  
+  return { path: routePath, method, url };
+}
+
+// Main request handler
+Deno.serve(async (req: Request) => {
+  // Handle CORS preflight
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', { headers: corsHeaders });
   }
-});
 
-app.post('/api-server/checklists', async (c) => {
+  const { path, method } = parseRequest(req);
+  
   try {
-    const { user, error } = await getUser(c.req.raw);
-    if (error || !user) {
-      return c.json({ error: error || 'Unauthorized' }, 401);
-    }
-    
-    const { title } = await c.req.json();
-    const checklistId = crypto.randomUUID();
-    
-    // Create checklist with NR-12 template
-    const checklist = {
-      id: checklistId,
-      userId: user.id,
-      title,
-      chapters: NR12_TEMPLATE.map(chapter => ({
-        ...chapter,
-        items: chapter.items.map(item => ({
-          ...item,
-          id: `${checklistId}-${item.id}`
-        }))
-      })),
-      createdAt: new Date().toISOString(),
-      lastSaved: new Date().toISOString()
-    };
-    
-    await kv.set(`checklist:${user.id}:${checklistId}`, checklist);
-    return c.json({ checklist });
-  } catch (error) {
-    console.log(`Error creating checklist: ${error.message}`);
-    return c.json({ error: error.message }, 500);
-  }
-});
+    console.log(`${method} ${path}`);
 
-app.put('/api-server/checklists/:id', async (c) => {
-  try {
-    const { user, error } = await getUser(c.req.raw);
-    if (error || !user) {
-      return c.json({ error: error || 'Unauthorized' }, 401);
+    // ============ AUTH SESSION ENDPOINTS ============
+    
+    // POST /api-server/auth-session
+    if (method === 'POST' && path === '/auth-session') {
+      try {
+        const { access_token } = await req.json();
+        const setCookieHeader = `nr12_access_token=${access_token}; Path=/; Max-Age=3600; HttpOnly; Secure; SameSite=Lax`;
+        
+        return new Response(
+          JSON.stringify({ success: true }),
+          {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json', 'Set-Cookie': setCookieHeader },
+            status: 200,
+          }
+        );
+      } catch (error: any) {
+        return new Response(
+          JSON.stringify({ error: error.message }),
+          {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            status: 500,
+          }
+        );
+      }
     }
-    
-    const checklistId = c.req.param('id');
-    const updates = await c.req.json();
-    
-    const existing = await kv.get(`checklist:${user.id}:${checklistId}`);
-    if (!existing) {
-      return c.json({ error: 'Checklist not found' }, 404);
-    }
-    
-    const updated = { ...existing, ...updates };
-    await kv.set(`checklist:${user.id}:${checklistId}`, updated);
-    return c.json({ checklist: updated });
-  } catch (error) {
-    console.log(`Error updating checklist: ${error.message}`);
-    return c.json({ error: error.message }, 500);
-  }
-});
 
-app.delete('/api-server/checklists/:id', async (c) => {
-  try {
-    const { user, error } = await getUser(c.req.raw);
-    if (error || !user) {
-      return c.json({ error: error || 'Unauthorized' }, 401);
+    // GET /api-server/validate-session
+    if (method === 'GET' && path === '/validate-session') {
+      try {
+        const cookieHeader = req.headers.get('Cookie');
+        let token: string | null = null;
+        
+        if (cookieHeader) {
+          const match = cookieHeader.match(/nr12_access_token=([^;]+)/);
+          token = match?.[1] || null;
+        }
+        
+        if (!token) {
+          return new Response(
+            JSON.stringify({ valid: false }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 401 }
+          );
+        }
+        
+        const { data: { user }, error } = await supabase.auth.getUser(token);
+        if (error || !user) {
+          return new Response(
+            JSON.stringify({ valid: false }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 401 }
+          );
+        }
+        
+        return new Response(
+          JSON.stringify({ valid: true, user }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
+        );
+      } catch (error: any) {
+        return new Response(
+          JSON.stringify({ valid: false, error: error.message }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
+        );
+      }
     }
-    
-    const checklistId = c.req.param('id');
-    await kv.del(`checklist:${user.id}:${checklistId}`);
-    return c.json({ success: true });
-  } catch (error) {
-    console.log(`Error deleting checklist: ${error.message}`);
-    return c.json({ error: error.message }, 500);
-  }
-});
 
-// Photo upload route
-app.post('/api-server/photos/upload', async (c) => {
-  try {
-    const { user, error } = await getUser(c.req.raw);
-    if (error || !user) {
-      return c.json({ error: error || 'Unauthorized' }, 401);
+    // ============ SIGNUP ENDPOINT ============
+    
+    // POST /api-server/signup
+    if (method === 'POST' && path === '/signup') {
+      try {
+        const { email, password, name, isFirstAdmin } = await req.json();
+        
+        const userCode = `USR${Date.now().toString().slice(-8)}${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
+        
+        let role = 'Employee';
+        if (isFirstAdmin) {
+          const existingUsers = await kv.getByPrefix('user:');
+          if (existingUsers.length === 0) {
+            role = 'Administrator';
+          }
+        }
+        
+        const { data, error } = await supabase.auth.admin.createUser({
+          email,
+          password,
+          user_metadata: { 
+            name,
+            user_code: userCode,
+            role,
+            profile_picture: null
+          },
+          email_confirm: true
+        });
+        
+        if (error) {
+          console.log(`Signup error: ${error.message}`);
+          return new Response(
+            JSON.stringify({ error: error.message }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
+          );
+        }
+        
+        await kv.set(`user:${data.user.id}`, {
+          id: data.user.id,
+          email: data.user.email,
+          name,
+          user_code: userCode,
+          role,
+          profile_picture: null,
+          createdAt: new Date().toISOString()
+        });
+        
+        return new Response(
+          JSON.stringify({ user: data.user }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
+        );
+      } catch (error: any) {
+        console.log(`Signup error: ${error.message}`);
+        return new Response(
+          JSON.stringify({ error: error.message }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
+        );
+      }
     }
-    
-    const formData = await c.req.formData();
-    const file = formData.get('file') as File;
-    
-    if (!file) {
-      return c.json({ error: 'No file provided' }, 400);
-    }
-    
-    const fileExt = file.name.split('.').pop();
-    const fileName = `${user.id}/${crypto.randomUUID()}.${fileExt}`;
-    const fileBuffer = await file.arrayBuffer();
-    
-    const { data, error: uploadError } = await supabase.storage
-      .from(BUCKET_NAME)
-      .upload(fileName, fileBuffer, {
-        contentType: file.type
-      });
-    
-    if (uploadError) {
-      console.log(`Photo upload error: ${uploadError.message}`);
-      return c.json({ error: uploadError.message }, 500);
-    }
-    
-    // Create signed URL valid for 1 year
-    const { data: urlData } = await supabase.storage
-      .from(BUCKET_NAME)
-      .createSignedUrl(fileName, 31536000);
-    
-    return c.json({ photoUrl: urlData?.signedUrl, path: fileName });
-  } catch (error) {
-    console.log(`Photo upload error: ${error.message}`);
-    return c.json({ error: error.message }, 500);
-  }
-});
 
-// Export report route
-app.get('/api-server/checklists/:id/export', async (c) => {
-  try {
-    const { user, error } = await getUser(c.req.raw);
-    if (error || !user) {
-      return c.json({ error: error || 'Unauthorized' }, 401);
+    // ============ CHECKLISTS ENDPOINTS ============
+    
+    // GET /api-server/checklists
+    if (method === 'GET' && path === '/checklists') {
+      try {
+        const { user, error } = await getUser(req);
+        if (error || !user) {
+          return new Response(
+            JSON.stringify({ error: error || 'Unauthorized' }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 401 }
+          );
+        }
+        
+        const checklists = await kv.getByPrefix(`checklist:${user.id}:`);
+        return new Response(
+          JSON.stringify({ checklists }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
+        );
+      } catch (error: any) {
+        console.log(`Error fetching checklists: ${error.message}`);
+        return new Response(
+          JSON.stringify({ error: error.message }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
+        );
+      }
     }
-    
-    const checklistId = c.req.param('id');
-    const checklist = await kv.get(`checklist:${user.id}:${checklistId}`);
-    
-    if (!checklist) {
-      return c.json({ error: 'Checklist not found' }, 404);
+
+    // POST /api-server/checklists
+    if (method === 'POST' && path === '/checklists') {
+      try {
+        const { user, error } = await getUser(req);
+        if (error || !user) {
+          return new Response(
+            JSON.stringify({ error: error || 'Unauthorized' }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 401 }
+          );
+        }
+        
+        const { title } = await req.json();
+        const checklistId = crypto.randomUUID();
+        
+        const checklist = {
+          id: checklistId,
+          userId: user.id,
+          title,
+          chapters: NR12_TEMPLATE.map(chapter => ({
+            ...chapter,
+            items: chapter.items.map(item => ({
+              ...item,
+              id: `${checklistId}-${item.id}`
+            }))
+          })),
+          createdAt: new Date().toISOString(),
+          lastSaved: new Date().toISOString()
+        };
+        
+        await kv.set(`checklist:${user.id}:${checklistId}`, checklist);
+        return new Response(
+          JSON.stringify({ checklist }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
+        );
+      } catch (error: any) {
+        console.log(`Error creating checklist: ${error.message}`);
+        return new Response(
+          JSON.stringify({ error: error.message }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
+        );
+      }
     }
+
+    // PUT /api-server/checklists/:id
+    if (method === 'PUT' && path.startsWith('/checklists/')) {
+      try {
+        const { user, error } = await getUser(req);
+        if (error || !user) {
+          return new Response(
+            JSON.stringify({ error: error || 'Unauthorized' }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 401 }
+          );
+        }
+        
+        const checklistId = path.split('/')[2];
+        const updates = await req.json();
+        
+        const existing = await kv.get(`checklist:${user.id}:${checklistId}`);
+        if (!existing) {
+          return new Response(
+            JSON.stringify({ error: 'Checklist not found' }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 404 }
+          );
+        }
+        
+        const updated = { ...existing, ...updates };
+        await kv.set(`checklist:${user.id}:${checklistId}`, updated);
+        return new Response(
+          JSON.stringify({ checklist: updated }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
+        );
+      } catch (error: any) {
+        console.log(`Error updating checklist: ${error.message}`);
+        return new Response(
+          JSON.stringify({ error: error.message }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
+        );
+      }
+    }
+
+    // DELETE /api-server/checklists/:id
+    if (method === 'DELETE' && path.startsWith('/checklists/')) {
+      try {
+        const { user, error } = await getUser(req);
+        if (error || !user) {
+          return new Response(
+            JSON.stringify({ error: error || 'Unauthorized' }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 401 }
+          );
+        }
+        
+        const checklistId = path.split('/')[2];
+        await kv.del(`checklist:${user.id}:${checklistId}`);
+        return new Response(
+          JSON.stringify({ success: true }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
+        );
+      } catch (error: any) {
+        console.log(`Error deleting checklist: ${error.message}`);
+        return new Response(
+          JSON.stringify({ error: error.message }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
+        );
+      }
+    }
+
+    // ============ PHOTOS ENDPOINT ============
     
-    // Generate HTML report
-    const completedCount = checklist.items.filter((item: any) => item.completed).length;
-    const totalCount = checklist.items.length;
+    // POST /api-server/photos/upload
+    if (method === 'POST' && path === '/photos/upload') {
+      try {
+        const { user, error } = await getUser(req);
+        if (error || !user) {
+          return new Response(
+            JSON.stringify({ error: error || 'Unauthorized' }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 401 }
+          );
+        }
+        
+        const formData = await req.formData();
+        const file = formData.get('file') as File;
+        
+        if (!file) {
+          return new Response(
+            JSON.stringify({ error: 'No file provided' }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
+          );
+        }
+        
+        const fileExt = file.name.split('.').pop();
+        const fileName = `${user.id}/${crypto.randomUUID()}.${fileExt}`;
+        const fileBuffer = await file.arrayBuffer();
+        
+        const { data, error: uploadError } = await supabase.storage
+          .from(BUCKET_NAME)
+          .upload(fileName, fileBuffer, {
+            contentType: file.type
+          });
+        
+        if (uploadError) {
+          console.log(`Photo upload error: ${uploadError.message}`);
+          return new Response(
+            JSON.stringify({ error: uploadError.message }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
+          );
+        }
+        
+        const { data: urlData } = await supabase.storage
+          .from(BUCKET_NAME)
+          .createSignedUrl(fileName, 31536000);
+        
+        return new Response(
+          JSON.stringify({ photoUrl: urlData?.signedUrl, path: fileName }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
+        );
+      } catch (error: any) {
+        console.log(`Photo upload error: ${error.message}`);
+        return new Response(
+          JSON.stringify({ error: error.message }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
+        );
+      }
+    }
+
+    // ============ EXPORT ENDPOINT ============
     
-    let html = `
+    // GET /api-server/checklists/:id/export
+    if (method === 'GET' && path.includes('/export')) {
+      try {
+        const { user, error } = await getUser(req);
+        if (error || !user) {
+          return new Response(
+            JSON.stringify({ error: error || 'Unauthorized' }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 401 }
+          );
+        }
+        
+        const checklistId = path.split('/')[2];
+        const checklist = await kv.get(`checklist:${user.id}:${checklistId}`);
+        
+        if (!checklist) {
+          return new Response(
+            JSON.stringify({ error: 'Checklist not found' }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 404 }
+          );
+        }
+        
+        const completedCount = checklist.items?.filter((item: any) => item.completed).length || 0;
+        const totalCount = checklist.items?.length || 0;
+        
+        let html = `
 <!DOCTYPE html>
 <html>
 <head>
@@ -366,242 +481,328 @@ app.get('/api-server/checklists/:id/export', async (c) => {
   </div>
   <h2>Items</h2>
 `;
-    
-    for (const item of checklist.items) {
-      const status = item.completed ? 'Completed' : 'Pending';
-      const statusClass = item.completed ? '' : 'pending';
-      
-      html += `
+        
+        if (checklist.items && Array.isArray(checklist.items)) {
+          for (const item of checklist.items) {
+            const status = item.completed ? 'Completed' : 'Pending';
+            const statusClass = item.completed ? '' : 'pending';
+            
+            html += `
   <div class="item ${item.completed ? 'completed' : ''}">
     <div class="item-text">${item.text}</div>
     <div class="item-status ${statusClass}">${status}</div>
 `;
-      
-      if (item.photoUrl) {
-        html += `    <img class="photo" src="${item.photoUrl}" alt="Item photo" />\n`;
-      }
-      
-      html += `  </div>\n`;
-    }
-    
-    html += `
+            
+            if (item.photoUrl) {
+              html += `    <img class="photo" src="${item.photoUrl}" alt="Item photo" />\n`;
+            }
+            
+            html += `  </div>\n`;
+          }
+        }
+        
+        html += `
 </body>
 </html>
 `;
-    
-    return c.html(html);
-  } catch (error) {
-    console.log(`Export error: ${error.message}`);
-    return c.json({ error: error.message }, 500);
-  }
-});
-
-// User Management routes
-app.get('/api-server/users', async (c) => {
-  try {
-    const { user, error } = await getUser(c.req.raw);
-    if (error || !user) {
-      return c.json({ error: error || 'Unauthorized' }, 401);
-    }
-    
-    // Get current user's role
-    const currentUserData = await kv.get(`user:${user.id}`);
-    const currentRole = currentUserData?.role || user.user_metadata?.role || 'Employee';
-    
-    // Only Administrators and Managers can list users
-    if (currentRole !== 'Administrator' && currentRole !== 'Manager') {
-      return c.json({ error: 'Insufficient permissions' }, 403);
-    }
-    
-    const users = await kv.getByPrefix('user:');
-    return c.json({ users });
-  } catch (error) {
-    console.log(`Error fetching users: ${error.message}`);
-    return c.json({ error: error.message }, 500);
-  }
-});
-
-app.get('/api-server/users/me', async (c) => {
-  try {
-    const { user, error } = await getUser(c.req.raw);
-    if (error || !user) {
-      return c.json({ error: error || 'Unauthorized' }, 401);
-    }
-    
-    let userData = await kv.get(`user:${user.id}`);
-    
-    // If no data in KV store, create from user metadata
-    if (!userData) {
-      userData = {
-        id: user.id,
-        email: user.email,
-        name: user.user_metadata?.name,
-        user_code: user.user_metadata?.user_code,
-        role: user.user_metadata?.role || 'Employee',
-        profile_picture: user.user_metadata?.profile_picture,
-        createdAt: user.created_at
-      };
-      await kv.set(`user:${user.id}`, userData);
-    }
-    
-    return c.json({ user: userData });
-  } catch (error) {
-    console.log(`Error fetching user profile: ${error.message}`);
-    return c.json({ error: error.message }, 500);
-  }
-});
-
-app.put('/api-server/users/:id', async (c) => {
-  try {
-    const { user, error } = await getUser(c.req.raw);
-    if (error || !user) {
-      return c.json({ error: error || 'Unauthorized' }, 401);
-    }
-    
-    const targetUserId = c.req.param('id');
-    const { name, email } = await c.req.json();
-    
-    // Users can only edit their own profile, unless they're admin
-    const currentUserData = await kv.get(`user:${user.id}`);
-    const currentRole = currentUserData?.role || user.user_metadata?.role || 'Employee';
-    
-    if (user.id !== targetUserId && currentRole !== 'Administrator') {
-      return c.json({ error: 'Insufficient permissions' }, 403);
-    }
-    
-    const userData = await kv.get(`user:${targetUserId}`);
-    if (!userData) {
-      return c.json({ error: 'User not found' }, 404);
-    }
-    
-    // Update user data
-    const updatedData = {
-      ...userData,
-      name: name || userData.name,
-      email: email || userData.email
-    };
-    
-    await kv.set(`user:${targetUserId}`, updatedData);
-    
-    // Update auth user metadata
-    await supabase.auth.admin.updateUserById(targetUserId, {
-      email: email || userData.email,
-      user_metadata: {
-        ...userData,
-        name: name || userData.name
+        
+        return new Response(html, {
+          headers: { ...corsHeaders, 'Content-Type': 'text/html' },
+          status: 200
+        });
+      } catch (error: any) {
+        console.log(`Export error: ${error.message}`);
+        return new Response(
+          JSON.stringify({ error: error.message }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
+        );
       }
-    });
+    }
+
+    // ============ USER MANAGEMENT ENDPOINTS ============
     
-    return c.json({ user: updatedData });
-  } catch (error) {
-    console.log(`Error updating user: ${error.message}`);
-    return c.json({ error: error.message }, 500);
+    // GET /api-server/users
+    if (method === 'GET' && path === '/users') {
+      try {
+        const { user, error } = await getUser(req);
+        if (error || !user) {
+          return new Response(
+            JSON.stringify({ error: error || 'Unauthorized' }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 401 }
+          );
+        }
+        
+        const currentUserData = await kv.get(`user:${user.id}`);
+        const currentRole = currentUserData?.role || user.user_metadata?.role || 'Employee';
+        
+        if (currentRole !== 'Administrator' && currentRole !== 'Manager') {
+          return new Response(
+            JSON.stringify({ error: 'Insufficient permissions' }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 403 }
+          );
+        }
+        
+        const users = await kv.getByPrefix('user:');
+        return new Response(
+          JSON.stringify({ users }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
+        );
+      } catch (error: any) {
+        console.log(`Error fetching users: ${error.message}`);
+        return new Response(
+          JSON.stringify({ error: error.message }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
+        );
+      }
+    }
+
+    // GET /api-server/users/me
+    if (method === 'GET' && path === '/users/me') {
+      try {
+        const { user, error } = await getUser(req);
+        if (error || !user) {
+          return new Response(
+            JSON.stringify({ error: error || 'Unauthorized' }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 401 }
+          );
+        }
+        
+        let userData = await kv.get(`user:${user.id}`);
+        
+        if (!userData) {
+          userData = {
+            id: user.id,
+            email: user.email,
+            name: user.user_metadata?.name,
+            user_code: user.user_metadata?.user_code,
+            role: user.user_metadata?.role || 'Employee',
+            profile_picture: user.user_metadata?.profile_picture,
+            createdAt: user.created_at
+          };
+          await kv.set(`user:${user.id}`, userData);
+        }
+        
+        return new Response(
+          JSON.stringify({ user: userData }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
+        );
+      } catch (error: any) {
+        console.log(`Error fetching user profile: ${error.message}`);
+        return new Response(
+          JSON.stringify({ error: error.message }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
+        );
+      }
+    }
+
+    // PUT /api-server/users/:id
+    if (method === 'PUT' && path.startsWith('/users/') && !path.includes('/role') && !path.includes('/profile-picture')) {
+      try {
+        const { user, error } = await getUser(req);
+        if (error || !user) {
+          return new Response(
+            JSON.stringify({ error: error || 'Unauthorized' }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 401 }
+          );
+        }
+        
+        const targetUserId = path.split('/')[2];
+        const { name, email } = await req.json();
+        
+        const currentUserData = await kv.get(`user:${user.id}`);
+        const currentRole = currentUserData?.role || user.user_metadata?.role || 'Employee';
+        
+        if (user.id !== targetUserId && currentRole !== 'Administrator') {
+          return new Response(
+            JSON.stringify({ error: 'Insufficient permissions' }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 403 }
+          );
+        }
+        
+        const userData = await kv.get(`user:${targetUserId}`);
+        if (!userData) {
+          return new Response(
+            JSON.stringify({ error: 'User not found' }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 404 }
+          );
+        }
+        
+        const updatedData = {
+          ...userData,
+          name: name || userData.name,
+          email: email || userData.email
+        };
+        
+        await kv.set(`user:${targetUserId}`, updatedData);
+        
+        await supabase.auth.admin.updateUserById(targetUserId, {
+          email: email || userData.email,
+          user_metadata: {
+            ...userData,
+            name: name || userData.name
+          }
+        });
+        
+        return new Response(
+          JSON.stringify({ user: updatedData }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
+        );
+      } catch (error: any) {
+        console.log(`Error updating user: ${error.message}`);
+        return new Response(
+          JSON.stringify({ error: error.message }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
+        );
+      }
+    }
+
+    // PUT /api-server/users/:id/role
+    if (method === 'PUT' && path.includes('/role')) {
+      try {
+        const { user, error } = await getUser(req);
+        if (error || !user) {
+          return new Response(
+            JSON.stringify({ error: error || 'Unauthorized' }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 401 }
+          );
+        }
+        
+        const currentUserData = await kv.get(`user:${user.id}`);
+        const currentRole = currentUserData?.role || user.user_metadata?.role || 'Employee';
+        
+        if (currentRole !== 'Administrator') {
+          return new Response(
+            JSON.stringify({ error: 'Only administrators can change user roles' }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 403 }
+          );
+        }
+        
+        const targetUserId = path.split('/')[2];
+        const { role } = await req.json();
+        
+        if (!['Administrator', 'Manager', 'Employee'].includes(role)) {
+          return new Response(
+            JSON.stringify({ error: 'Invalid role' }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
+          );
+        }
+        
+        const userData = await kv.get(`user:${targetUserId}`);
+        if (!userData) {
+          return new Response(
+            JSON.stringify({ error: 'User not found' }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 404 }
+          );
+        }
+        
+        const updatedData = { ...userData, role };
+        await kv.set(`user:${targetUserId}`, updatedData);
+        
+        await supabase.auth.admin.updateUserById(targetUserId, {
+          user_metadata: { ...userData, role }
+        });
+        
+        return new Response(
+          JSON.stringify({ user: updatedData }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
+        );
+      } catch (error: any) {
+        console.log(`Error updating user role: ${error.message}`);
+        return new Response(
+          JSON.stringify({ error: error.message }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
+        );
+      }
+    }
+
+    // POST /api-server/users/:id/profile-picture
+    if (method === 'POST' && path.includes('/profile-picture')) {
+      try {
+        const { user, error } = await getUser(req);
+        if (error || !user) {
+          return new Response(
+            JSON.stringify({ error: error || 'Unauthorized' }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 401 }
+          );
+        }
+        
+        const targetUserId = path.split('/')[2];
+        
+        if (user.id !== targetUserId) {
+          return new Response(
+            JSON.stringify({ error: 'Insufficient permissions' }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 403 }
+          );
+        }
+        
+        const formData = await req.formData();
+        const file = formData.get('file') as File;
+        
+        if (!file) {
+          return new Response(
+            JSON.stringify({ error: 'No file provided' }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
+          );
+        }
+        
+        const fileExt = file.name.split('.').pop();
+        const fileName = `profile-pictures/${user.id}/${crypto.randomUUID()}.${fileExt}`;
+        const fileBuffer = await file.arrayBuffer();
+        
+        const { data, error: uploadError } = await supabase.storage
+          .from(BUCKET_NAME)
+          .upload(fileName, fileBuffer, {
+            contentType: file.type,
+            upsert: true
+          });
+        
+        if (uploadError) {
+          console.log(`Profile picture upload error: ${uploadError.message}`);
+          return new Response(
+            JSON.stringify({ error: uploadError.message }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
+          );
+        }
+        
+        const { data: urlData } = await supabase.storage
+          .from(BUCKET_NAME)
+          .createSignedUrl(fileName, 31536000);
+        
+        const userData = await kv.get(`user:${user.id}`);
+        const updatedData = {
+          ...userData,
+          profile_picture: urlData?.signedUrl
+        };
+        
+        await kv.set(`user:${user.id}`, updatedData);
+        
+        await supabase.auth.admin.updateUserById(user.id, {
+          user_metadata: { ...updatedData }
+        });
+        
+        return new Response(
+          JSON.stringify({ profile_picture: urlData?.signedUrl }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
+        );
+      } catch (error: any) {
+        console.log(`Profile picture upload error: ${error.message}`);
+        return new Response(
+          JSON.stringify({ error: error.message }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
+        );
+      }
+    }
+
+    // 404 - Route not found
+    return new Response(
+      JSON.stringify({ error: 'Route not found' }),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 404 }
+    );
+  } catch (error: any) {
+    console.error('Unhandled error:', error);
+    return new Response(
+      JSON.stringify({ error: error.message || 'Internal server error' }),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
+    );
   }
 });
-
-app.put('/api-server/users/:id/role', async (c) => {
-  try {
-    const { user, error } = await getUser(c.req.raw);
-    if (error || !user) {
-      return c.json({ error: error || 'Unauthorized' }, 401);
-    }
-    
-    // Only Administrators can change roles
-    const currentUserData = await kv.get(`user:${user.id}`);
-    const currentRole = currentUserData?.role || user.user_metadata?.role || 'Employee';
-    
-    if (currentRole !== 'Administrator') {
-      return c.json({ error: 'Only administrators can change user roles' }, 403);
-    }
-    
-    const targetUserId = c.req.param('id');
-    const { role } = await c.req.json();
-    
-    if (!['Administrator', 'Manager', 'Employee'].includes(role)) {
-      return c.json({ error: 'Invalid role' }, 400);
-    }
-    
-    const userData = await kv.get(`user:${targetUserId}`);
-    if (!userData) {
-      return c.json({ error: 'User not found' }, 404);
-    }
-    
-    const updatedData = { ...userData, role };
-    await kv.set(`user:${targetUserId}`, updatedData);
-    
-    // Update auth user metadata
-    await supabase.auth.admin.updateUserById(targetUserId, {
-      user_metadata: { ...userData, role }
-    });
-    
-    return c.json({ user: updatedData });
-  } catch (error) {
-    console.log(`Error updating user role: ${error.message}`);
-    return c.json({ error: error.message }, 500);
-  }
-});
-
-app.post('/api-server/users/:id/profile-picture', async (c) => {
-  try {
-    const { user, error } = await getUser(c.req.raw);
-    if (error || !user) {
-      return c.json({ error: error || 'Unauthorized' }, 401);
-    }
-    
-    const targetUserId = c.req.param('id');
-    
-    // Users can only change their own profile picture
-    if (user.id !== targetUserId) {
-      return c.json({ error: 'Insufficient permissions' }, 403);
-    }
-    
-    const formData = await c.req.formData();
-    const file = formData.get('file') as File;
-    
-    if (!file) {
-      return c.json({ error: 'No file provided' }, 400);
-    }
-    
-    const fileExt = file.name.split('.').pop();
-    const fileName = `profile-pictures/${user.id}/${crypto.randomUUID()}.${fileExt}`;
-    const fileBuffer = await file.arrayBuffer();
-    
-    const { data, error: uploadError } = await supabase.storage
-      .from(BUCKET_NAME)
-      .upload(fileName, fileBuffer, {
-        contentType: file.type,
-        upsert: true
-      });
-    
-    if (uploadError) {
-      console.log(`Profile picture upload error: ${uploadError.message}`);
-      return c.json({ error: uploadError.message }, 500);
-    }
-    
-    // Create signed URL valid for 1 year
-    const { data: urlData } = await supabase.storage
-      .from(BUCKET_NAME)
-      .createSignedUrl(fileName, 31536000);
-    
-    // Update user data
-    const userData = await kv.get(`user:${user.id}`);
-    const updatedData = {
-      ...userData,
-      profile_picture: urlData?.signedUrl
-    };
-    
-    await kv.set(`user:${user.id}`, updatedData);
-    
-    // Update auth user metadata
-    await supabase.auth.admin.updateUserById(user.id, {
-      user_metadata: { ...updatedData }
-    });
-    
-    return c.json({ profile_picture: urlData?.signedUrl });
-  } catch (error) {
-    console.log(`Profile picture upload error: ${error.message}`);
-    return c.json({ error: error.message }, 500);
-  }
-});
-
-Deno.serve(app.fetch);
