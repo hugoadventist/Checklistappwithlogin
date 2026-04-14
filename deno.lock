@@ -9,6 +9,7 @@
   "workspace": {
     "packageJson": {
       "dependencies": [
+        "npm:@github/copilot@^1.0.25",
         "npm:@radix-ui/react-accordion@^1.2.3",
         "npm:@radix-ui/react-alert-dialog@^1.1.6",
         "npm:@radix-ui/react-aspect-ratio@^1.1.2",
@@ -53,7 +54,7 @@
         "npm:sonner@^2.0.3",
         "npm:typescript@^6.0.2",
         "npm:vaul@^1.1.2",
-        "npm:vite@6.3.5"
+        "npm:vite@^6.4.2"
       ]
     }
   }

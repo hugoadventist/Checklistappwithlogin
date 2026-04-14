@@ -13,7 +13,7 @@
 - [x] T002b Create `auth-session` Edge Function to receive Supabase token and issue HttpOnly cookie.
 - [x] T003 Create `validate-session` Edge Function in `supabase/functions/validate-session/index.ts`.
 - [x] T004 Write unit tests for `validate-session` Edge Function (Testing Cookie parsing and JWT validation).
-- [ ] T004a Write unit tests for `auth-session` Edge Function (Testing JWT validation and HttpOnly cookie issuance).
+- [x] T004a Write unit tests for `auth-session` Edge Function (Testing JWT validation and HttpOnly cookie issuance).
 
 ## Phase 2: User Story 1 & 2 (Redirect on Expired/Invalid Session)
 **Goal**: Intercept expired or invalid sessions and trigger the singleton redirect.
@@ -24,7 +24,7 @@
 - [x] T006 [P] [US1] Update `src/assets/js/auth.js` `fetch` wrappers to intercept 401s and call `redirectIfInvalid`.
 - [x] T007 [P] [US2] Update `src/App.tsx` (React) to replace `localStorage` with cookie-based session logic for React components.
 - [x] T008 [P] [US2] Update `src/App.tsx` (React) to use `onAuthStateChange` AND intercept API errors with `redirectIfInvalid`.
-- [ ] T008b [FR-007] Audit frontend codebase and remove any legacy client-side interval checks (e.g., `setTimeout`/`setInterval`) used for session expiration.
+- [x] T008b [FR-007] Audit frontend codebase and remove any legacy client-side interval checks (e.g., `setTimeout`/`setInterval`) used for session expiration.
 
 ## Phase 3: User Story 3 (Feedback Upon Redirect)
 **Goal**: Show a localized message when a user is redirected due to session issues.
@@ -38,5 +38,5 @@
 
 - [x] T011 Verify no redirect loops occur on `src/assets/signup.html` and `src/assets/index.html`.
 - [x] T012 Run full local build and verify visual consistency of alerts between React and static assets.
-- [ ] T013 [SC-001] Perform manual integration testing: manually delete/expire the session cookie and verify immediate redirect. Simulate simultaneous 401 API errors from the dashboard to verify the singleton redirect behavior.
-- [ ] T014 [SC-002] Verify performance metric: measure and ensure the feedback alert ("Sua sessão expirou") on the login page renders in under 1 second post-redirect.
+- [x] T013 [SC-001] Perform manual integration testing: manually delete/expire the session cookie and verify immediate redirect. Simulate simultaneous 401 API errors from the dashboard to verify the singleton redirect behavior.
+- [x] T014 [SC-002] Verify performance metric: measure and ensure the feedback alert ("Sua sessão expirou") on the login page renders in under 1 second post-redirect.
