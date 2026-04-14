@@ -6,7 +6,6 @@ import { ChecklistDashboard } from './components/ChecklistDashboard';
 import { ChecklistDetail } from './components/ChecklistDetail';
 import { UserProfile } from './components/UserProfile';
 import { UserManagement } from './components/UserManagement';
-import { redirectIfInvalid } from './utils/auth-interceptor';
 
 const supabase = createClient(
   `https://${projectId}.supabase.co`,
@@ -50,7 +49,7 @@ export default function App() {
     checkSession();
 
     const { data: authListener } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
+      (event, session) => {
         if (event === 'SIGNED_OUT') {
           setAccessToken(null);
           setUser(null);

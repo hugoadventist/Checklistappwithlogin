@@ -18,7 +18,7 @@ export function LoginScreen({ onLogin, onSignup, onForgotPassword }: LoginScreen
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
+    const params = new URLSearchParams((globalThis as unknown as { location?: { search?: string } }).location?.search || '');
     if (params.get('reason') === 'expired') {
       setError('Sua sessão expirou. Por favor, faça login novamente.');
     }

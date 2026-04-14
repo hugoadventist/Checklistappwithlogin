@@ -5,7 +5,7 @@ function redirectIfInvalid(reason = 'expired') {
   if (isRedirecting) return;
   isRedirecting = true;
   localStorage.removeItem(STORAGE_KEYS.USER_DATA);
-  window.location.href = `index.html?reason=${encodeURIComponent(reason)}`;
+  if (globalThis.location) globalThis.location.href = `index.html?reason=${encodeURIComponent(reason)}`;
 }
 
 // Custom fetch wrapper to handle 401s and cookies
@@ -42,8 +42,8 @@ async function signUp(email, password, name) {
     }
 
     return { success: true, user: data.user };
-  } catch (error) {
-    console.error('Signup error:', error);
+  } catch (_error) {
+    console.error('Signup error:', _error);
     return { success: false, error: 'Network error' };
   }
 }
@@ -88,8 +88,8 @@ async function signIn(email, password) {
     }
 
     return { success: false, error: 'No access token returned' };
-  } catch (error) {
-    console.error('Sign in error:', error);
+  } catch (_error) {
+    console.error('Sign in error:', _error);
     return { success: false, error: 'Network error' };
   }
 }
@@ -109,7 +109,7 @@ function getUserData() {
 function logout() {
   localStorage.removeItem(STORAGE_KEYS.USER_DATA);
   // Optional: Call endpoint to clear cookie
-  window.location.href = 'index.html';
+  if (globalThis.location) globalThis.location.href = 'index.html';
 }
 
 // Check if user is authenticated via validation endpoint
@@ -119,7 +119,7 @@ async function isAuthenticated() {
       credentials: 'include'
     });
     return response.ok;
-  } catch (e) {
+  } catch (_e) {
     return false;
   }
 }

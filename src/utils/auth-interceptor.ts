@@ -3,33 +3,42 @@ let isRedirecting = false;
 export function redirectIfInvalid(reason: string = 'expired') {
   if (isRedirecting) return;
   isRedirecting = true;
-  
+
   // Clear any local storage auth state to be safe
-  localStorage.removeItem('nr12_access_token');
-  localStorage.removeItem('nr12_user_data');
-  
-  window.location.href = `/?reason=${encodeURIComponent(reason)}`;
+  try {
+    localStorage.removeItem('nr12_access_token');
+    localStorage.removeItem('nr12_user_data');
+  } catch (_e) {
+    // ignore (e.g., running in non-window environment)
+  }
+
+  const g = globalThis as unknown as { location?: { href: string } };
+  if (g.location) g.location.href = `/?reason=${encodeURIComponent(reason)}`;
 }
 
-  export function setupFetchInterceptor() {
-    const originalFetch = window.fetch;
-    window.fetch = async function (...args) {
-      // Add credentials: 'include' by default for API calls to our backend
-      if (typeof args[0] === 'string' && args[0].includes('api-server')) {
-        args[1] = args[1] || {};
-        args[1].credentials = 'include';
+export function setupFetchInterceptor() {
+  const g = globalThis as unknown as { fetch?: (input: RequestInfo, init?: RequestInit) => Promise<Response> };
+  const originalFetch = (g.fetch ?? fetch).bind(globalThis) as (input: RequestInfo, init?: RequestInit) => Promise<Response>;
+
+  // Assign a replacement fetch implementation
+  (g as unknown as Record<string, unknown>).fetch = (async function (input: RequestInfo, init?: RequestInit) {
+    // Add credentials: 'include' by default for API calls to our backend
+    let url = input;
+    let options = init || {};
+
+    if (typeof input === 'string' && input.includes('api-server')) {
+      options = { ...(options as RequestInit), credentials: 'include' };
+    }
+
+    try {
+      const response = await originalFetch(url, options);
+      if (response.status === 401 || response.status === 403) {
+        redirectIfInvalid('expired');
       }
-      
-      try {
-        // Use window context to avoid Illegal Invocation errors
-        const response = await originalFetch.apply(window, args);
-        if (response.status === 401 || response.status === 403) {
-          redirectIfInvalid('expired');
-        }
-        return response;
-      } catch (error) {
-        console.error('Fetch error in interceptor:', error);
-        throw error;
-      }
-    };
-  }
+      return response;
+    } catch (error) {
+      console.error('Fetch error in interceptor:', error);
+      throw error;
+    }
+  }) as unknown as (input: RequestInfo, init?: RequestInit) => Promise<Response>;
+}
