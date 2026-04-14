@@ -1,22 +1,34 @@
-import { Hono } from 'npm:hono';
-import { cors } from 'npm:hono/cors';
-import { logger } from 'npm:hono/logger';
-import { setCookie, getCookie } from 'npm:hono/cookie';
+import { Hono } from 'hono';
+import { cors } from 'hono/cors';
+import { logger } from 'hono/logger';
+import { setCookie, getCookie } from 'hono/cookie';
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import * as kv from '../_shared/kv_store.ts';
 import { NR12_TEMPLATE } from '../_shared/nr12-template.ts';
-import { corsHeaders } from '../_shared/cors.ts';
 
 const app = new Hono();
 
+// Get origin from environment or use localhost for development
+const getAllowedOrigins = (): string[] => {
+  const prodOrigin = Deno.env.get('PROD_URL') || '';
+  const origins = ['http://localhost:3000', 'http://localhost:5173'];
+  if (prodOrigin) origins.push(prodOrigin);
+  return origins;
+};
+
+const allowedOrigins = getAllowedOrigins();
+
 app.use('*', cors({
   origin: (origin) => {
-    return origin && origin !== 'null' ? origin : 'http://localhost:3000';
+    // Allow specific origins, not wildcard, to support credentials
+    if (!origin) return 'http://localhost:3000';
+    return allowedOrigins.includes(origin) ? origin : allowedOrigins[0];
   },
   credentials: true,
   allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowHeaders: ['Content-Type', 'Authorization', 'x-client-info', 'apikey', 'cookie'],
-  exposeHeaders: ['set-cookie'],
+  exposeHeaders: ['set-cookie', 'Content-Type'],
+  maxAge: 86400,
 }));
 app.use('*', logger(console.log));
 
