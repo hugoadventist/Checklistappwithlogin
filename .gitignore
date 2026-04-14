@@ -1,6 +1,5 @@
+.github
 node_modules
-.gemini
-specs
 .vscode
 
 # Added missing common patterns for Node.js
